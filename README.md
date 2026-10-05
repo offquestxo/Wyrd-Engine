@@ -25,6 +25,7 @@ Then open `.env` and add your keys (see below). `.env` and `data/` are git-ignor
 
 ```bash
 make check-providers   # tests each API key (Groq, Gemini, NVIDIA, YouTube)
+make check-models      # checks configured model IDs against each provider's live list
 make dev               # API on http://127.0.0.1:8000, web on http://127.0.0.1:3000
 make test              # lint + type check + offline tests (Python and web)
 make test-live         # hits the real APIs with Circuit City as the test company
@@ -37,7 +38,7 @@ All are free. Only `SEC_USER_AGENT` is needed for the keyless sources. Everythin
 | `.env` variable | What it's for | Where to get it |
 |---|---|---|
 | `GROQ_API_KEY` | Fast scoring, @mention parsing | [console.groq.com/keys](https://console.groq.com/keys) → *Create API Key* |
-| `GEMINI_API_KEY` | Long documents (10-Ks, court filings), outlier analysis | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) → *Create API key*. Your free-tier limits are shown at [aistudio.google.com/rate-limit](https://aistudio.google.com/rate-limit) |
+| `GEMINI_API_KEY` | Long documents (10-Ks, court filings), outlier analysis, Gemma scoring | Must be a standard key starting with `AIza`. New AI Studio keys start with `AQ.` and are currently rejected by the Gemini API (a known Google issue). Instead, open [Google Cloud Console → Credentials](https://console.cloud.google.com/apis/credentials) for your AI Studio project → *Create credentials → API key*, and restrict it to the *Generative Language API*. Your free-tier limits are shown at [aistudio.google.com/rate-limit](https://aistudio.google.com/rate-limit) |
 | `NVIDIA_API_KEY` | Dossier second opinions, embeddings | [build.nvidia.com](https://build.nvidia.com) → sign in → profile menu → *API Keys* → *Generate* (starts with `nvapi-`) |
 | `YOUTUBE_API_KEY` | @outlier stats, gap-finder coverage checks | [Google Cloud Console](https://console.cloud.google.com/): create a project → enable [YouTube Data API v3](https://console.cloud.google.com/apis/library/youtube.googleapis.com) → *APIs & Services → Credentials → Create credentials → API key*. Restrict the key to the YouTube Data API |
 | `COURTLISTENER_TOKEN` | Higher limits for lawsuits/bankruptcy dockets (optional; anonymous search works) | Create an account at [courtlistener.com](https://www.courtlistener.com/), then copy your token from your profile's API page (see [API help](https://www.courtlistener.com/help/api/rest/)) |

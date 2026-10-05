@@ -5,6 +5,7 @@ Docs: https://ai.google.dev/gemini-api/docs (models, structured-output, embeddin
 
 from __future__ import annotations
 
+import asyncio
 import time
 from typing import Any
 
@@ -20,6 +21,15 @@ from apps.api.providers.base import (
     classify_status,
 )
 
+# Google-side issue (2026): new "AQ."-format keys from AI Studio are rejected by the Gemini
+# API with 401 ACCESS_TOKEN_TYPE_UNSUPPORTED, even via plain curl. Standard "AIza" keys work.
+AQ_KEY_HINT = (
+    "HTTP 401: this GEMINI_API_KEY is a new 'AQ.'-format key, which the Gemini API currently "
+    "rejects (known Google issue). Create a standard 'AIza' key in Google Cloud Console "
+    "(APIs & Services > Credentials > Create credentials > API key, restricted to the "
+    "Generative Language API) in your AI Studio project, and put it in .env."
+)
+
 
 class GeminiProvider:
     name = "gemini"
@@ -27,7 +37,9 @@ class GeminiProvider:
     def __init__(self, *, api_key: str, api_key_env: str = "GEMINI_API_KEY") -> None:
         self._api_key = api_key
         self._api_key_env = api_key_env
-        self._client: genai.Client | None = None
+        # The SDK's async transport is bound to the event loop it was created on, so keep
+        # one client per loop (the app has one; tests and CLIs create several).
+        self._clients: dict[int, genai.Client] = {}
 
     @property
     def configured(self) -> bool:
@@ -36,15 +48,21 @@ class GeminiProvider:
     def _get_client(self) -> genai.Client:
         if not self._api_key:
             raise MissingKeyError(self.name, self._api_key_env)
-        if self._client is None:
-            self._client = genai.Client(api_key=self._api_key)
-        return self._client
+        try:
+            loop_id = id(asyncio.get_running_loop())
+        except RuntimeError:
+            loop_id = 0
+        if loop_id not in self._clients:
+            self._clients = {loop_id: genai.Client(api_key=self._api_key)}
+        return self._clients[loop_id]
 
     def _wrap(self, e: Exception) -> ProviderError:
         if isinstance(e, ProviderError):
             return e
         if isinstance(e, errors.APIError):
             code = int(e.code or 0)
+            if code == 401 and self._api_key.startswith("AQ."):
+                return ProviderError(self.name, AQ_KEY_HINT, status=code, retryable=False)
             return ProviderError(
                 self.name,
                 f"HTTP {code}: {str(e.message or '')[:200]}",
@@ -113,6 +131,13 @@ class GeminiProvider:
         if len(vectors) != len(texts):
             raise ProviderError(self.name, "embedding count mismatch", retryable=True)
         return EmbedResult(vectors=vectors, model=model)
+
+    async def list_models(self) -> list[str]:
+        try:
+            pager = await self._get_client().aio.models.list(config={"page_size": 200})
+            return [(m.name or "").removeprefix("models/") async for m in pager]
+        except Exception as e:
+            raise self._wrap(e) from e
 
     async def test_connection(self) -> ConnectionTest:
         start = time.monotonic()
