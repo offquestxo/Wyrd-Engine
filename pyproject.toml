@@ -1,0 +1,58 @@
+[project]
+name = "wyrd-engine"
+version = "0.1.0"
+description = "wyrd.exe story engine: finds, scores, and researches true business stories."
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.142.2",
+    "feedparser>=6.0.14",
+    "google-genai>=2.28.0",
+    "httpx>=0.28.1",
+    "pydantic-settings>=2.15.0",
+    "python-dotenv>=1.2.4",
+    "pyyaml>=6.0.3",
+    "sqlmodel>=0.0.47",
+    "uvicorn[standard]>=0.54.0",
+    "yfinance>=1.7.0",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["apps/web"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC", "SIM", "RUF"]
+allowed-confusables = ["–", "’"]
+
+[tool.mypy]
+python_version = "3.12"
+packages = ["apps.api"]
+plugins = ["pydantic.mypy"]
+check_untyped_defs = true
+disallow_untyped_defs = true
+warn_unused_ignores = true
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+markers = ["live: hits real network APIs (skipped by default; run with -m live)"]
+addopts = "-m 'not live'"
+
+[dependency-groups]
+dev = [
+    "mypy>=2.4.0",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "respx>=0.23.1",
+    "ruff>=0.16.10",
+    "types-pyyaml>=6.0.12.20260906",
+]
