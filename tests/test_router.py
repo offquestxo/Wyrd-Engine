@@ -367,3 +367,24 @@ async def test_gemini_aq_key_gets_actionable_error() -> None:
     provider = GeminiProvider(api_key="AQ.fake")
     err = provider._wrap(errors.ClientError(401, {"error": {"message": "Expected OAuth 2"}}))
     assert "AIza" in str(err) and not err.retryable
+
+
+async def test_auth_failure_skips_provider_until_cooldown(engine: Any) -> None:
+    now = [1000.0]
+    rejected = ProviderError("gemini", "HTTP 401", status=401)
+    ok = json.dumps({"scores": [GOOD_SCORE]})
+    gemini = FakeProvider("gemini", [rejected, ok])
+    nvidia = FakeProvider("nvidia", [ok, ok])
+    config = make_config()
+    config.tasks["score_items"] = config.tasks["score_items"][1:]  # gemini → nvidia
+    router = Router(
+        config, {"gemini": gemini, "nvidia": nvidia}, UsageLog(engine), clock=lambda: now[0]
+    )
+
+    await router.score_items(ITEMS)  # gemini 401 → nvidia
+    await router.score_items(ITEMS)  # gemini skipped entirely
+    assert len(gemini.calls) == 1 and len(nvidia.calls) == 2
+
+    now[0] += config.auth_failure_cooldown_s
+    await router.score_items(ITEMS)  # cooldown over → gemini tried again and works
+    assert len(gemini.calls) == 2 and len(nvidia.calls) == 2

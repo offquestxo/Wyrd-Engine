@@ -51,6 +51,7 @@ class ProvidersConfig(BaseModel):
     providers: dict[str, ProviderConfig]
     retry: RetryConfig = Field(default_factory=RetryConfig)
     near_limit_ratio: float = 0.9
+    auth_failure_cooldown_s: float = 900.0
     tasks: dict[str, list[RouteStep]]
 
     def model(self, provider: str, alias: str) -> ModelConfig:

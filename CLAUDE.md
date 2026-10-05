@@ -54,5 +54,11 @@ You are building and maintaining the wyrd.exe story engine: a local app that fin
 
 ## Current status
 
-<!-- Update this section at the end of each phase. -->
-- Phase 0: complete (awaiting review)
+- Phase 0 (foundation): **done**, pushed to github.com/offquestxo/Wyrd-Engine (private).
+  Config, SQLite schema + FTS5, provider router (retries, fallback, JSON repair, usage
+  logging, auth-failure cooldown), 12 source CLIs, FastAPI health/key-status endpoints.
+- Provider status: NVIDIA ✅, YouTube ✅, CourtListener token set. Groq: no key yet (Gemma/NVIDIA cover
+  its tasks). **Gemini: unavailable** — the owner's key is `AQ.`-format and rejected with 401
+  (Google-side issue). Gemini stays in all routes and activates once a working key is in `.env`;
+  every Gemini route falls back to NVIDIA. See docs/decisions.md.
+- Phase 1 (UI shell): in progress.
