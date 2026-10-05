@@ -4,7 +4,7 @@ The story engine for **wyrd.exe**: it finds, reads, and researches true business
 
 `SPEC.md` is the source of truth for what gets built; `CLAUDE.md` holds the working rules.
 
-**Status:** Phase 0 (foundation) is complete: config, database, the provider router, and the source modules. The web UI arrives in Phase 1.
+**Status:** Phase 0 (foundation) and Phase 1 (UI shell) are complete. Pages other than Settings show sample data (marked **SAMPLE DATA**) until their agents land in Phases 2–6.
 
 ## Requirements
 
@@ -46,6 +46,21 @@ All are free. Only `SEC_USER_AGENT` is needed for the keyless sources. Everythin
 | `SEC_USER_AGENT` | Required by SEC EDGAR (no key) | Set to your name or app plus a contact email, e.g. `"wyrd.exe research you@example.com"` |
 
 Model IDs and free-tier limits live in `config/providers.yaml`. Free tiers change often, so edit that file (or Settings, from Phase 1) when they do.
+
+## Using the app
+
+Open http://127.0.0.1:3000 after `make dev`. In Chrome or Edge, use the install icon in the address bar to install it as a desktop app.
+
+| Shortcut | Action |
+|---|---|
+| `⌘K` / `Ctrl+K` | Command palette: jump to a page, start an agent, find a story |
+| `g` then `h` `c` `s` `r` `o` `,` | Go to Home, Chat, Stories, Research, Outliers, Settings |
+| `⌘.` / `Ctrl+.` | Toggle the live panel (active runs + event stream) |
+| `⌘S` in a config editor | Save (validated before writing) |
+
+**Settings** uses real data: key status and "Test connection", provider routes and limits, per-agent auto-approve (off by default), and editors for every file in `config/`. After editing `.env`, click **Reload .env** instead of restarting.
+
+To preview a page's loading, empty, or error state, add `?state=loading`, `?state=empty`, or `?state=error` to its URL (sample-data pages only).
 
 ## Source CLIs
 
