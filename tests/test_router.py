@@ -1,0 +1,274 @@
+"""Router behaviour: retries, fallback on simulated provider failure, JSON repair, usage logging."""
+
+from __future__ import annotations
+
+import json
+from typing import Any
+
+import pytest
+from sqlmodel import Session, select
+
+from apps.api.config import ProvidersConfig
+from apps.api.db.migrate import migrate_path
+from apps.api.db.models import ProviderUsage
+from apps.api.db.session import make_engine
+from apps.api.providers.base import ChatResult, ConnectionTest, EmbedResult, ProviderError
+from apps.api.providers.router import AllProvidersFailed, Router
+from apps.api.providers.schemas import ItemToScore
+from apps.api.providers.usage import UsageLog
+
+GOOD_SCORE = {
+    "id": "a",
+    "drama": 8,
+    "twist": 7,
+    "relatability": 9,
+    "visual_potential": 6,
+    "hook_number": 7,
+    "freshness": 5,
+    "hook": "The store everyone knew vanished overnight.",
+    "series": "Recent Collapses",
+    "format": "Long",
+}
+
+
+class FakeProvider:
+    """Replays a script of responses: str → ChatResult text, Exception → raised."""
+
+    def __init__(self, name: str, script: list[Any], configured: bool = True) -> None:
+        self.name = name
+        self.script = list(script)
+        self.calls: list[dict[str, Any]] = []
+        self._configured = configured
+
+    @property
+    def configured(self) -> bool:
+        return self._configured
+
+    def _next(self) -> Any:
+        item = self.script.pop(0) if self.script else ProviderError(self.name, "script exhausted")
+        if isinstance(item, Exception):
+            raise item
+        return item
+
+    async def chat(self, **kwargs: Any) -> ChatResult:
+        self.calls.append(kwargs)
+        return ChatResult(text=self._next(), tokens_in=10, tokens_out=5)
+
+    async def embed(self, **kwargs: Any) -> EmbedResult:
+        self.calls.append(kwargs)
+        vectors = self._next()
+        return EmbedResult(vectors=vectors, model=kwargs["model"], tokens_in=3)
+
+    async def test_connection(self) -> ConnectionTest:
+        return ConnectionTest(provider=self.name, ok=True, detail="fake")
+
+
+def make_config() -> ProvidersConfig:
+    limits = {"rpm": 30, "rpd": 1000, "tpm": None, "tpd": None}
+    return ProvidersConfig.model_validate(
+        {
+            "providers": {
+                "groq": {
+                    "kind": "openai_compat",
+                    "api_key_env": "GROQ_API_KEY",
+                    "json_mode": True,
+                    "models": {"fast": {"id": "groq-model", "limits": limits}},
+                },
+                "gemini": {
+                    "kind": "gemini",
+                    "api_key_env": "GEMINI_API_KEY",
+                    "json_mode": True,
+                    "models": {
+                        "lite": {"id": "gemini-model", "limits": limits},
+                        "embed": {"id": "gemini-embed", "dimensions": 4},
+                    },
+                },
+                "nvidia": {
+                    "kind": "openai_compat",
+                    "api_key_env": "NVIDIA_API_KEY",
+                    "models": {
+                        "chat": {"id": "nvidia-model", "limits": limits},
+                        "embed": {"id": "nvidia-embed"},
+                    },
+                },
+            },
+            "retry": {"max_attempts": 3, "base_delay_s": 1.0, "max_delay_s": 8.0},
+            "near_limit_ratio": 0.9,
+            "tasks": {
+                "score_items": [
+                    {"provider": "groq", "model": "fast"},
+                    {"provider": "gemini", "model": "lite"},
+                    {"provider": "nvidia", "model": "chat"},
+                ],
+                "embed": [
+                    {"provider": "nvidia", "model": "embed"},
+                    {"provider": "gemini", "model": "embed"},
+                ],
+            },
+        }
+    )
+
+
+@pytest.fixture
+def engine(tmp_path: Any) -> Any:
+    db = tmp_path / "test.db"
+    migrate_path(db)
+    return make_engine(db)
+
+
+def make_router(engine: Any, **providers: FakeProvider) -> tuple[Router, list[float]]:
+    sleeps: list[float] = []
+
+    async def fake_sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+
+    return Router(make_config(), dict(providers), UsageLog(engine), sleep=fake_sleep), sleeps
+
+
+def usage_rows(engine: Any) -> list[ProviderUsage]:
+    with Session(engine) as s:
+        return list(s.exec(select(ProviderUsage).order_by(ProviderUsage.id)))  # type: ignore[arg-type]
+
+
+ITEMS = [ItemToScore(id="a", title="Circuit City liquidates all stores")]
+
+
+async def test_primary_success_logs_usage(engine: Any) -> None:
+    groq = FakeProvider("groq", [json.dumps({"scores": [GOOD_SCORE]})])
+    router, _ = make_router(
+        engine, groq=groq, gemini=FakeProvider("gemini", []), nvidia=FakeProvider("nvidia", [])
+    )
+    scores = await router.score_items(ITEMS)
+    assert scores[0].drama == 8
+    rows = usage_rows(engine)
+    assert [(r.provider, r.ok, r.task, r.tokens_in) for r in rows] == [
+        ("groq", True, "score_items", 10)
+    ]
+    # The fetched content is wrapped as data, and the prompt came from prompts/scout_scoring.md.
+    assert "<data>" in groq.calls[0]["user"]
+    assert "wyrd.exe" in groq.calls[0]["system"]
+
+
+async def test_fallback_when_primary_fails(engine: Any) -> None:
+    """Simulated outage: Groq returns 503 on every attempt → router falls back to Gemini."""
+    outage = ProviderError("groq", "HTTP 503", status=503, retryable=True)
+    groq = FakeProvider("groq", [outage, outage, outage])
+    gemini = FakeProvider("gemini", [json.dumps({"scores": [GOOD_SCORE]})])
+    router, sleeps = make_router(
+        engine, groq=groq, gemini=gemini, nvidia=FakeProvider("nvidia", [])
+    )
+
+    scores = await router.score_items(ITEMS)
+
+    assert scores[0].id == "a"
+    assert len(groq.calls) == 3  # retried up to max_attempts
+    assert sleeps == [1.0, 2.0]  # exponential backoff between attempts
+    rows = usage_rows(engine)
+    assert [(r.provider, r.ok) for r in rows] == [("groq", False)] * 3 + [("gemini", True)]
+    kinds = [e.kind for e in router.events]
+    assert kinds.count("retry") == 2 and "fallback" in kinds
+
+
+async def test_non_retryable_error_falls_back_immediately(engine: Any) -> None:
+    groq = FakeProvider("groq", [ProviderError("groq", "HTTP 401", status=401, retryable=False)])
+    gemini = FakeProvider("gemini", [json.dumps({"scores": [GOOD_SCORE]})])
+    router, sleeps = make_router(
+        engine, groq=groq, gemini=gemini, nvidia=FakeProvider("nvidia", [])
+    )
+    await router.score_items(ITEMS)
+    assert len(groq.calls) == 1 and sleeps == []
+
+
+async def test_retry_after_header_respected(engine: Any) -> None:
+    limited = ProviderError("groq", "HTTP 429", status=429, retryable=True, retry_after_s=5)
+    groq = FakeProvider("groq", [limited, json.dumps({"scores": [GOOD_SCORE]})])
+    router, sleeps = make_router(
+        engine, groq=groq, gemini=FakeProvider("gemini", []), nvidia=FakeProvider("nvidia", [])
+    )
+    await router.score_items(ITEMS)
+    assert sleeps == [5.0]
+
+
+async def test_invalid_json_gets_one_repair_then_succeeds(engine: Any) -> None:
+    bad = json.dumps({"scores": [{**GOOD_SCORE, "drama": 42}]})  # out of 1–10 range
+    groq = FakeProvider("groq", [bad, "```json\n" + json.dumps({"scores": [GOOD_SCORE]}) + "\n```"])
+    router, _ = make_router(
+        engine, groq=groq, gemini=FakeProvider("gemini", []), nvidia=FakeProvider("nvidia", [])
+    )
+    scores = await router.score_items(ITEMS)
+    assert scores[0].drama == 8
+    assert len(groq.calls) == 2
+    assert "failed validation" in groq.calls[1]["system"]  # prompts/json_repair.md
+
+
+async def test_invalid_json_after_repair_falls_back(engine: Any) -> None:
+    groq = FakeProvider("groq", ["not json", "still not json"])
+    nvidia_ok = json.dumps({"scores": [GOOD_SCORE]})
+    gemini = FakeProvider("gemini", ["{}", "{}"])  # valid JSON, wrong shape, twice
+    nvidia = FakeProvider("nvidia", [f"Sure! Here you go: {nvidia_ok}"])
+    router, _ = make_router(engine, groq=groq, gemini=gemini, nvidia=nvidia)
+    scores = await router.score_items(ITEMS)
+    assert scores[0].id == "a"
+    assert (len(groq.calls), len(gemini.calls), len(nvidia.calls)) == (2, 2, 1)
+
+
+async def test_unconfigured_provider_is_skipped(engine: Any) -> None:
+    groq = FakeProvider("groq", [], configured=False)
+    gemini = FakeProvider("gemini", [json.dumps({"scores": [GOOD_SCORE]})])
+    router, _ = make_router(engine, groq=groq, gemini=gemini, nvidia=FakeProvider("nvidia", []))
+    await router.score_items(ITEMS)
+    assert groq.calls == []
+    assert any(e.kind == "skip" and e.provider == "groq" for e in router.events)
+
+
+async def test_near_limit_provider_tried_last(engine: Any) -> None:
+    usage = UsageLog(engine)
+    for _ in range(28):  # 28/30 rpm ≥ 0.9
+        usage.record(provider="groq", model="groq-model", task="score_items", ok=True)
+    groq = FakeProvider("groq", [json.dumps({"scores": [GOOD_SCORE]})])
+    gemini = FakeProvider("gemini", [json.dumps({"scores": [GOOD_SCORE]})])
+    router, _ = make_router(engine, groq=groq, gemini=gemini, nvidia=FakeProvider("nvidia", []))
+    await router.score_items(ITEMS)
+    assert groq.calls == [] and len(gemini.calls) == 1
+
+
+async def test_all_providers_failing_raises_cleanly(engine: Any) -> None:
+    down = ProviderError("x", "HTTP 401", status=401)
+    router, _ = make_router(
+        engine,
+        groq=FakeProvider("groq", [down]),
+        gemini=FakeProvider("gemini", [down]),
+        nvidia=FakeProvider("nvidia", [down]),
+    )
+    with pytest.raises(AllProvidersFailed) as exc:
+        await router.score_items(ITEMS)
+    assert len(exc.value.errors) == 3
+
+
+async def test_embed_falls_back_and_records_model(engine: Any) -> None:
+    nvidia = FakeProvider(
+        "nvidia", [ProviderError("nvidia", "HTTP 500", status=500, retryable=True)] * 3
+    )
+    gemini = FakeProvider("gemini", [[[0.1, 0.2, 0.3, 0.4]]])
+    router, _ = make_router(engine, groq=FakeProvider("groq", []), gemini=gemini, nvidia=nvidia)
+    result = await router.embed(["Circuit City"])
+    assert result.model == "gemini-embed" and len(result.vectors[0]) == 4
+    assert gemini.calls[0]["dimensions"] == 4
+
+
+async def test_extract_drops_quotes_not_in_document(engine: Any) -> None:
+    config = make_config()
+    config.tasks["extract_from_document"] = config.tasks["score_items"]
+    doc = "Circuit City Stores, Inc. filed for Chapter 11 on November 10, 2008."
+    answer = {
+        "answer": "It filed in Nov 2008.",
+        "found": True,
+        "extracts": [
+            {"quote": "filed for Chapter 11 on November 10, 2008"},
+            {"quote": "Circuit City had 1,500 stores"},  # fabricated → must be dropped
+        ],
+    }
+    groq = FakeProvider("groq", [json.dumps(answer)])
+    router = Router(config, {"groq": groq}, UsageLog(engine))
+    result = await router.extract_from_document(doc, "When did it file?")
+    assert [x.quote for x in result.extracts] == ["filed for Chapter 11 on November 10, 2008"]
