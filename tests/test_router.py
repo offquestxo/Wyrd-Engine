@@ -272,3 +272,98 @@ async def test_extract_drops_quotes_not_in_document(engine: Any) -> None:
     router = Router(config, {"groq": groq}, UsageLog(engine))
     result = await router.extract_from_document(doc, "When did it file?")
     assert [x.quote for x in result.extracts] == ["filed for Chapter 11 on November 10, 2008"]
+
+
+# ---------------------------------------------------------------- batching / chunking
+def budget_config(cap: int) -> ProvidersConfig:
+    config = make_config()
+    gemma = {"id": "gemma-model", "json_mode": False, "max_request_tokens": cap}
+    config.providers["gemini"].models["gemma"] = type(config.model("gemini", "lite"))(**gemma)
+    route = [{"provider": "groq", "model": "fast"}, {"provider": "gemini", "model": "gemma"}]
+    config.tasks["score_items"] = [type(config.tasks["embed"][0])(**s) for s in route]
+    config.tasks["extract_from_document"] = config.tasks["score_items"]
+    return config
+
+
+async def test_per_model_json_mode_override_and_groq_skip(engine: Any) -> None:
+    groq = FakeProvider("groq", [], configured=False)  # no key → Gemma leads
+    gemini = FakeProvider("gemini", [json.dumps({"scores": [GOOD_SCORE]})])
+    router = Router(budget_config(100_000), {"groq": groq, "gemini": gemini}, UsageLog(engine))
+    await router.score_items(ITEMS)
+    assert gemini.calls[0]["model"] == "gemma-model"
+    assert gemini.calls[0]["json_mode"] is False
+
+
+async def test_score_items_batches_under_token_budget(engine: Any) -> None:
+    items = [ItemToScore(id=str(i), title="x" * 400) for i in range(12)]
+    gemini = FakeProvider("gemini", [])
+    router = Router(budget_config(2500), {"gemini": gemini}, UsageLog(engine))
+    batches = router._score_batches(items)
+    assert len(batches) > 1 and sum(len(b) for b in batches) == 12
+    gemini.script = [
+        json.dumps({"scores": [{**GOOD_SCORE, "id": i.id} for i in b]}) for b in batches
+    ]
+    scores = await router.score_items(items)
+    assert sorted(int(s.id) for s in scores) == list(range(12))
+    assert len(gemini.calls) == len(batches)
+
+
+def test_split_text_respects_max_chars() -> None:
+    from apps.api.providers.router import split_text
+
+    text = "\n\n".join(f"Paragraph {i}. " + "word " * 50 for i in range(40))
+    chunks = split_text(text, 1000)
+    assert len(chunks) > 1 and all(len(c) <= 1000 for c in chunks)
+    assert "".join(chunks) == text
+    assert split_text("short", 1000) == ["short"]
+
+
+async def test_extract_chunks_long_documents_and_merges(engine: Any) -> None:
+    doc = "\n\n".join(
+        [f"Filler paragraph {i}. " + "lorem " * 200 for i in range(30)]
+        + ["Circuit City filed for Chapter 11 on November 10, 2008."]
+    )
+    gemini = FakeProvider("gemini", [])
+    router = Router(budget_config(12_000), {"gemini": gemini}, UsageLog(engine))
+    not_found = json.dumps({"answer": "Not in this part.", "found": False, "extracts": []})
+    hit = json.dumps(
+        {
+            "answer": "November 10, 2008.",
+            "found": True,
+            "extracts": [{"quote": "filed for Chapter 11 on November 10, 2008"}],
+        }
+    )
+
+    # Only the chunk containing the filing date "finds" the answer.
+    async def chat(**kwargs: Any) -> Any:
+        gemini.calls.append(kwargs)
+        text = hit if "November 10, 2008" in kwargs["user"] else not_found
+        return ChatResult(text=text, tokens_in=1, tokens_out=1)
+
+    gemini.chat = chat  # type: ignore[method-assign]
+    result = await router.extract_from_document(doc, "When did it file?")
+    assert len(gemini.calls) > 1
+    assert all(len(c["user"]) // 4 < 12_000 for c in gemini.calls)
+    assert result.found and result.answer == "November 10, 2008."
+    assert [x.quote for x in result.extracts] == ["filed for Chapter 11 on November 10, 2008"]
+
+
+async def test_extract_deep_uses_deep_route(engine: Any) -> None:
+    config = make_config()
+    config.tasks["extract_from_document_deep"] = config.tasks["score_items"][1:2]  # gemini
+    config.tasks["extract_from_document"] = config.tasks["score_items"][:1]  # groq
+    answer = json.dumps({"answer": "a", "found": False, "extracts": []})
+    groq, gemini = FakeProvider("groq", [answer]), FakeProvider("gemini", [answer])
+    router = Router(config, {"groq": groq, "gemini": gemini}, UsageLog(engine))
+    await router.extract_from_document("doc", "q", deep=True)
+    assert len(gemini.calls) == 1 and groq.calls == []
+
+
+async def test_gemini_aq_key_gets_actionable_error() -> None:
+    from google.genai import errors
+
+    from apps.api.providers.gemini import GeminiProvider
+
+    provider = GeminiProvider(api_key="AQ.fake")
+    err = provider._wrap(errors.ClientError(401, {"error": {"message": "Expected OAuth 2"}}))
+    assert "AIza" in str(err) and not err.retryable

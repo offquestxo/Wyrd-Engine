@@ -101,3 +101,32 @@ async def test_provider_connection(provider: str) -> None:
         pytest.skip(f"{provider} key not set in .env")
     result = await router.test_connection(provider)
     assert result.ok, result.detail
+
+
+async def test_router_embed_live() -> None:
+    router = get_router()
+    if not any(router.providers[p].configured for p in ("nvidia", "gemini")):
+        pytest.skip("no embedding provider key set")
+    result = await router.embed(["Circuit City liquidation", "Best Buy earnings"])
+    assert len(result.vectors) == 2 and len(result.vectors[0]) > 100
+
+
+async def test_router_score_items_live() -> None:
+    """Real end-to-end scoring through whatever providers currently work (with fallback)."""
+    from apps.api.providers.schemas import ItemToScore
+
+    router = get_router()
+    if not any(router.providers[p].configured for p in ("groq", "gemini", "nvidia")):
+        pytest.skip("no LLM provider key set")
+    scores = await router.score_items(
+        [
+            ItemToScore(
+                id="cc",
+                title="Circuit City to liquidate all U.S. stores after failing to find a buyer",
+                snippet="The electronics retailer will close its remaining 567 stores.",
+                source="test",
+            )
+        ]
+    )
+    assert scores and scores[0].id == "cc" and 1 <= scores[0].drama <= 10
+    print("router events:", [(e.kind, e.provider) for e in router.events])

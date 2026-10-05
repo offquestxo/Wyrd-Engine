@@ -47,6 +47,10 @@ from apps.api.providers.usage import UsageLog
 
 log = logging.getLogger("wyrd.router")
 
+# Token estimates used for batching/chunking (see estimate_tokens).
+SCORE_OUTPUT_TOKENS_PER_ITEM = 120
+EXTRACTION_OUTPUT_RESERVE_TOKENS = 8000
+
 T = TypeVar("T")
 M = TypeVar("M", bound=BaseModel)
 
@@ -88,6 +92,34 @@ def _extract_json(text: str) -> Any:
         if start < 0:
             raise
         return json.loads(stripped[start:])
+
+
+def estimate_tokens(text: str) -> int:
+    """Rough token count (~4 characters per token). Good enough for staying under limits."""
+    return len(text) // 4 + 1
+
+
+def split_text(text: str, max_chars: int) -> list[str]:
+    """Split on paragraph, then line, then hard boundaries so each piece fits max_chars."""
+    if len(text) <= max_chars:
+        return [text]
+    chunks: list[str] = []
+    current = ""
+    for para in re.split(r"(\n\s*\n)", text):
+        if len(current) + len(para) <= max_chars:
+            current += para
+            continue
+        if current:
+            chunks.append(current)
+        while len(para) > max_chars:
+            cut = para.rfind("\n", 0, max_chars)
+            cut = cut if cut > max_chars // 2 else max_chars
+            chunks.append(para[:cut])
+            para = para[cut:]
+        current = para
+    if current.strip():
+        chunks.append(current)
+    return chunks
 
 
 def _data_block(payload: Any) -> str:
@@ -169,6 +201,16 @@ class Router:
             usable.append((near, step))
         return [step for _, step in sorted(usable, key=lambda pair: pair[0])]
 
+    def request_budget(self, task: str) -> int | None:
+        """Smallest max_request_tokens among usable models in a task's route (None = no cap)."""
+        caps = [
+            self.config.model(step.provider, step.model).max_request_tokens
+            for step in self.config.tasks.get(task, [])
+            if (p := self.providers.get(step.provider)) is not None and p.configured
+        ]
+        known = [cap for cap in caps if cap]
+        return min(known) if known else None
+
     def _backoff(self, attempt: int, err: ProviderError) -> float:
         retry = self.config.retry
         delay = min(retry.max_delay_s, retry.base_delay_s * (2**attempt))
@@ -185,7 +227,11 @@ class Router:
         for index, step in enumerate(steps):
             provider = self.providers[step.provider]
             model = self.config.model(step.provider, step.model)
-            json_mode = self.config.providers[step.provider].json_mode
+            json_mode = (
+                model.json_mode
+                if model.json_mode is not None
+                else self.config.providers[step.provider].json_mode
+            )
             for attempt in range(self.config.retry.max_attempts):
                 try:
                     result = await call(step.provider, provider, model, json_mode)
@@ -302,26 +348,81 @@ class Router:
         return await self._run(task, call)
 
     # ------------------------------------------------------------------ tasks
+    def _score_batches(self, items: Sequence[ItemToScore]) -> list[list[ItemToScore]]:
+        budget = self.request_budget("score_items")
+        if not budget:
+            return [list(items)] if items else []
+        overhead = estimate_tokens(
+            prompts.render(
+                "scout_scoring", output_schema=json.dumps(ScoreBatch.model_json_schema())
+            )
+        )
+        batches: list[list[ItemToScore]] = []
+        current: list[ItemToScore] = []
+        used = overhead
+        for item in items:
+            # input JSON for the item + ~120 tokens of score output per item
+            cost = estimate_tokens(item.model_dump_json()) + SCORE_OUTPUT_TOKENS_PER_ITEM
+            if current and used + cost > budget:
+                batches.append(current)
+                current, used = [], overhead
+            current.append(item)
+            used += cost
+        if current:
+            batches.append(current)
+        return batches
+
     async def score_items(self, items: Sequence[ItemToScore]) -> list[ItemScore]:
-        payload = [item.model_dump() for item in items]
-        batch = await self._json_task("score_items", "scout_scoring", payload, ScoreBatch)
-        wanted = {item.id for item in items}
-        return [score for score in batch.scores if score.id in wanted]
+        """Scores items in batches sized to the route's max_request_tokens."""
+        scores: list[ItemScore] = []
+        for batch_items in self._score_batches(items):
+            payload = [item.model_dump() for item in batch_items]
+            batch = await self._json_task("score_items", "scout_scoring", payload, ScoreBatch)
+            wanted = {item.id for item in batch_items}
+            scores += [score for score in batch.scores if score.id in wanted]
+        return scores
 
     async def parse_mention(self, text: str) -> MentionParse:
         return await self._json_task("parse_mention", "parse_mention", text, MentionParse)
 
-    async def extract_from_document(self, document: str, question: str) -> DocExtraction:
-        payload = f"QUESTION: {question}\n\nDOCUMENT:\n{document}"
-        result = await self._json_task(
-            "extract_from_document", "doc_extraction", payload, DocExtraction
+    async def extract_from_document(
+        self, document: str, question: str, deep: bool = False
+    ) -> DocExtraction:
+        """Long-document extraction. `deep` uses the stronger (low-quota) model route.
+
+        Documents larger than the route's max_request_tokens are split into chunks; each
+        chunk is queried separately and the results merged.
+        """
+        task = "extract_from_document_deep" if deep else "extract_from_document"
+        budget = self.request_budget(task)
+        chunks = [document]
+        if budget:
+            overhead = estimate_tokens(
+                prompts.render(
+                    "doc_extraction", output_schema=json.dumps(DocExtraction.model_json_schema())
+                )
+                + question
+            )
+            room = budget - overhead - EXTRACTION_OUTPUT_RESERVE_TOKENS
+            chunks = split_text(document, max(room, 1000) * 4)
+
+        results: list[DocExtraction] = []
+        for chunk in chunks:
+            payload = f"QUESTION: {question}\n\nDOCUMENT:\n{chunk}"
+            results.append(await self._json_task(task, "doc_extraction", payload, DocExtraction))
+
+        found = [r for r in results if r.found]
+        merged = DocExtraction(
+            answer=" ".join(r.answer for r in found) if found else results[0].answer,
+            extracts=[x for r in results for x in r.extracts],
+            found=bool(found),
         )
         # Drop any "quote" that isn't actually in the document (research integrity).
         normalized_doc = " ".join(document.split())
-        result.extracts = [
-            x for x in result.extracts if " ".join(x.quote.split()) in normalized_doc
+        merged.extracts = [
+            x for x in merged.extracts if " ".join(x.quote.split()) in normalized_doc
         ]
-        return result
+        return merged
 
     async def analyze_outliers(self, videos: Sequence[VideoForAnalysis]) -> list[OutlierAnalysis]:
         payload = [video.model_dump() for video in videos]
@@ -418,8 +519,8 @@ async def parse_mention(text: str) -> MentionParse:
     return await get_router().parse_mention(text)
 
 
-async def extract_from_document(document: str, question: str) -> DocExtraction:
-    return await get_router().extract_from_document(document, question)
+async def extract_from_document(document: str, question: str, deep: bool = False) -> DocExtraction:
+    return await get_router().extract_from_document(document, question, deep)
 
 
 async def analyze_outliers(videos: Sequence[VideoForAnalysis]) -> list[OutlierAnalysis]:

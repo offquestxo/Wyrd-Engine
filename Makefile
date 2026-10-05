@@ -1,5 +1,5 @@
 # wyrd.exe story engine. Servers bind to 127.0.0.1 only.
-.PHONY: setup dev api web test test-live lint typecheck check-providers
+.PHONY: setup dev api web test test-live lint typecheck check-providers check-models
 
 setup:
 	uv sync
@@ -35,3 +35,7 @@ test-live:
 
 check-providers:
 	uv run python -m apps.api.providers.check
+
+# Compare configured model IDs with each provider's live model list.
+check-models:
+	uv run python -m apps.api.providers.check --models

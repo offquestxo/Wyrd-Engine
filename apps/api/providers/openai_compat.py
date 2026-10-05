@@ -129,6 +129,10 @@ class OpenAICompatProvider:
             vectors=vectors, model=model, tokens_in=int(usage.get("prompt_tokens") or 0)
         )
 
+    async def list_models(self) -> list[str]:
+        data = await self._request("GET", "/models")
+        return [str(m.get("id")) for m in data.get("data") or []]
+
     async def test_connection(self) -> ConnectionTest:
         start = time.monotonic()
         try:

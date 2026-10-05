@@ -22,6 +22,8 @@ class ModelConfig(BaseModel):
     id: str
     dimensions: int | None = None
     extra: dict[str, Any] = Field(default_factory=dict)  # provider-specific request fields
+    json_mode: bool | None = None  # overrides the provider default (e.g. Gemma: no JSON mode)
+    max_request_tokens: int | None = None  # router batches/chunks requests to stay under this
     limits: ModelLimits = Field(default_factory=ModelLimits)
 
 

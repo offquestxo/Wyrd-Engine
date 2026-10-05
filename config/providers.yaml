@@ -13,27 +13,39 @@ providers:
     models:
       fast:
         id: openai/gpt-oss-20b
+        max_request_tokens: 6000     # 8K TPM free tier
         limits: { rpm: 30, rpd: 1000, tpm: 8000, tpd: 200000 }
       smart:
         id: openai/gpt-oss-120b
+        max_request_tokens: 6000
         limits: { rpm: 30, rpd: 1000, tpm: 8000, tpd: 200000 }
 
   gemini:
-    # https://ai.google.dev/gemini-api/docs/models  and  /pricing (free tier).
-    # Google no longer publishes per-model free-tier numbers in docs; they are shown in
-    # AI Studio (https://aistudio.google.com/rate-limit). Values below are conservative
-    # placeholders — replace them with what AI Studio shows for your project.
+    # https://ai.google.dev/gemini-api/docs/models  and  /gemma/docs/core/gemma_on_gemini_api
+    # Limits below are the owner's AI Studio free-tier values (2026-10-05),
+    # from https://aistudio.google.com/rate-limit (RPM / TPM / RPD).
     kind: gemini
     api_key_env: GEMINI_API_KEY
     json_mode: true            # response_mime_type=application/json + response_json_schema
     models:
-      flash:
-        id: gemini-3.8-flash
-        limits: { rpm: 10, rpd: 250, tpm: 250000, tpd: null }
       lite:
         id: gemini-3.5-flash-lite
-        limits: { rpm: 15, rpd: 1000, tpm: 250000, tpd: null }
+        max_request_tokens: 200000   # extract_from_document chunks stay under this
+        limits: { rpm: 15, rpd: 500, tpm: 250000, tpd: null }
+      flash:
+        # Only 20 requests/day: reserved for deep-depth research extraction.
+        id: gemini-3.8-flash
+        max_request_tokens: 200000
+        limits: { rpm: 5, rpd: 20, tpm: 250000, tpd: null }
+      gemma:
+        id: gemma-4-31b-it
+        json_mode: false             # Gemma docs don't list JSON mode; router validates/repairs
+        max_request_tokens: 6000     # keeps score batches well under the 16K TPM limit
+        extra: { thinking_config: { thinking_level: MINIMAL } }
+        limits: { rpm: 30, rpd: 14400, tpm: 16000, tpd: null }
       embed:
+        # Docs disagree: models page says gemini-embedding-2-preview, embeddings guide
+        # uses gemini-embedding-2. Confirm with `make check-models` once the key works.
         id: gemini-embedding-2
         dimensions: 2048
         limits: { rpm: 100, rpd: 1000, tpm: 30000, tpd: null }
@@ -79,28 +91,36 @@ retry:
   base_delay_s: 1.0
   max_delay_s: 20.0
 
-# When a model has used this fraction of any known limit, the router tries the
-# other providers in the route first.
-near_limit_ratio: 0.9
+# When a model has used this fraction of any known limit (per minute or per day),
+# the router tries the other providers in the route first.
+near_limit_ratio: 0.8
 
 # Task → ordered list of provider/model aliases (first = primary, rest = fallbacks).
 tasks:
+  # Groq is primary for fast tasks; while GROQ_API_KEY is unset it is skipped, so Gemma
+  # leads automatically. Setting the key makes Groq primary again with no config change.
   score_items:
     - { provider: groq, model: fast }
-    - { provider: gemini, model: lite }
+    - { provider: gemini, model: gemma }
     - { provider: nvidia, model: chat }
   parse_mention:
     - { provider: groq, model: fast }
+    - { provider: gemini, model: gemma }
     - { provider: gemini, model: lite }
   extract_from_document:
+    - { provider: gemini, model: lite }
+    - { provider: nvidia, model: chat }
+  extract_from_document_deep:      # @researcher depth=deep only
     - { provider: gemini, model: flash }
+    - { provider: gemini, model: lite }
     - { provider: nvidia, model: chat }
   analyze_outliers:
-    - { provider: gemini, model: flash }
+    - { provider: gemini, model: lite }
     - { provider: groq, model: smart }
+    - { provider: nvidia, model: chat }
   second_opinion:
     - { provider: nvidia, model: chat }
-    - { provider: gemini, model: flash }
+    - { provider: gemini, model: lite }
   embed:
     - { provider: nvidia, model: embed }
     - { provider: gemini, model: embed }
