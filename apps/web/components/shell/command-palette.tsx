@@ -1,0 +1,106 @@
+"use client"
+
+import { PanelRightIcon, PlayIcon, RefreshCwIcon } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { toast } from "sonner"
+
+import {
+  Command,
+  CommandDialog,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator,
+  CommandShortcut,
+} from "@/components/ui/command"
+import { api } from "@/lib/api"
+import { MOCK_STORIES } from "@/lib/mock"
+import { AGENT_INFO, NAV } from "@/lib/nav"
+
+export function CommandPalette({
+  open,
+  onOpenChange,
+  onTogglePanel,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onTogglePanel: () => void
+}) {
+  const router = useRouter()
+  const run = (fn: () => void) => {
+    onOpenChange(false)
+    fn()
+  }
+
+  return (
+    <CommandDialog open={open} onOpenChange={onOpenChange} title="Command palette" description="Jump to a page, start an agent, or find a story">
+      <Command>
+      <CommandInput placeholder="Jump to, run an agent, or search stories…" />
+      <CommandList>
+        <CommandEmpty>No results.</CommandEmpty>
+        <CommandGroup heading="Go to">
+          {NAV.map((item) => (
+            <CommandItem key={item.href} value={`go ${item.label}`} onSelect={() => run(() => router.push(item.href))}>
+              <item.icon />
+              {item.label}
+              <CommandShortcut>g {item.key}</CommandShortcut>
+            </CommandItem>
+          ))}
+        </CommandGroup>
+        <CommandSeparator />
+        <CommandGroup heading="Start an agent">
+          {AGENT_INFO.map((agent) => (
+            <CommandItem
+              key={agent.name}
+              value={`run ${agent.name} ${agent.description}`}
+              onSelect={() => run(() => router.push(`/chat?compose=${encodeURIComponent(`@${agent.name} `)}`))}
+            >
+              <PlayIcon />
+              <span className="font-mono text-brand">@{agent.name}</span>
+              <span className="text-muted-foreground">{agent.description}</span>
+            </CommandItem>
+          ))}
+        </CommandGroup>
+        <CommandSeparator />
+        <CommandGroup heading="Stories (sample)">
+          {MOCK_STORIES.map((story) => (
+            <CommandItem
+              key={story.id}
+              value={`story ${story.title} ${story.company} ${story.series}`}
+              onSelect={() => run(() => router.push(`/stories?story=${story.id}`))}
+            >
+              <span>{story.title}</span>
+              <span className="text-muted-foreground">{story.series}</span>
+            </CommandItem>
+          ))}
+        </CommandGroup>
+        <CommandSeparator />
+        <CommandGroup heading="Actions">
+          <CommandItem value="toggle live panel" onSelect={() => run(onTogglePanel)}>
+            <PanelRightIcon />
+            Toggle live panel
+            <CommandShortcut>⌘.</CommandShortcut>
+          </CommandItem>
+          <CommandItem
+            value="reload env keys config"
+            onSelect={() =>
+              run(() =>
+                toast.promise(api("/api/system/reload", { method: "POST" }), {
+                  loading: "Reloading .env and config…",
+                  success: "Reloaded keys and config",
+                  error: (e: Error) => e.message,
+                }),
+              )
+            }
+          >
+            <RefreshCwIcon />
+            Reload .env and config
+          </CommandItem>
+        </CommandGroup>
+      </CommandList>
+      </Command>
+    </CommandDialog>
+  )
+}
