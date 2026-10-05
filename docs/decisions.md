@@ -65,3 +65,25 @@ Choices not covered by SPEC.md, newest last. Each keeps v1 simple and v2 easy.
 **Every route that uses Gemini ends with NVIDIA**, and `tests/test_config.py` enforces it. Verified live with the `AQ.` key: `parse_mention`, `score_items`, `extract_from_document` (standard and deep), `analyze_outliers`, `second_opinion`, and `embed` all returned valid results via NVIDIA.
 
 **Auth-failure cooldown.** After a 401/403, the router skips that provider for `auth_failure_cooldown_s` (900 s) instead of paying for a rejected request on every call. It then tries again; a passing "Test connection" or an API restart clears the block immediately. While Gemini is down, NVIDIA's ~40 RPM is the bottleneck for scoring and extraction.
+
+## Phase 1: UI shell (2026-10-05)
+
+**Sample data lives in the frontend** (`apps/web/lib/mock.ts`), behind the same types the backend will return, and every page using it shows a **SAMPLE DATA** badge. Sample hooks and scores are illustrative. The sample Circuit City dossier uses only facts and URLs fetched live in Phase 0, and labels everything else *(sample)*, so nothing invented looks like research. Each later phase swaps a page from `useDemo(...)` to a real `useSWR(...)` call.
+
+**`?state=loading|empty|error`** forces any sample-data page into that state, so all three are reviewable without breaking the backend.
+
+**Settings is real.** New endpoints:
+- `GET /api/keys`: status of every `.env` value (set / missing / failing), masked previews only. "Failing" comes from the last connection test or the router's auth cooldown.
+- `POST /api/system/reload`: re-reads `.env` and config without a restart.
+- `GET /api/agents`, `PUT /api/agents/{name}/auto-approve`: stored in the `settings` table, default off.
+- `GET/PUT /api/config/{providers|sources|channels|scoring}`: edited as raw YAML so comments survive. Edits are validated with the same Pydantic models the engine uses (provider routes must point at defined models), written atomically, and the router reloads on save.
+
+**Agent registry** (`apps/api/agents/registry.py`) lists v1 agents plus v2 `factcheck` and `graphics` as `available: false`. Adding an agent means one module plus one registry entry.
+
+**Live updates use FastAPI's built-in SSE** (`fastapi.sse.EventSourceResponse`, with automatic keep-alive pings). An in-process `EventBus` keeps the last 50 events so reconnecting clients catch up via `Last-Event-ID`. Phase 1 publishes system events (config saved, provider tested, keys reloaded, settings changed); Phase 2 adds run logs on the same stream.
+
+**`--timeout-graceful-shutdown 3`** on uvicorn. Without it, an open SSE connection (any browser tab) blocks Ctrl+C on `make dev` indefinitely.
+
+**Frontend stack:** shadcn/ui (radix-nova preset, Lucide icons), SWR for API calls, react-markdown + remark-gfm for dossiers. Dark-only theme; the one accent is `--brand` (violet) in `globals.css`. Next 16 notes: route types need `next typegen` before `tsc`, so `pnpm typecheck` runs both. React 19's lint rule forbids `setState` inside effects, so local edits are layered over loaded data rather than copied into state.
+
+**PWA:** manifest plus 192/512/maskable icons, no service worker. Next 16's PWA guide confirms installation doesn't need offline support, and leaving out a service worker avoids serving stale cached pages in dev. Chrome's `Page.getInstallabilityErrors` returns none.

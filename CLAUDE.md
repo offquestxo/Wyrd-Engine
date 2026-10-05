@@ -61,4 +61,6 @@ You are building and maintaining the wyrd.exe story engine: a local app that fin
   its tasks). **Gemini: unavailable** — the owner's key is `AQ.`-format and rejected with 401
   (Google-side issue). Gemini stays in all routes and activates once a working key is in `.env`;
   every Gemini route falls back to NVIDIA. See docs/decisions.md.
-- Phase 1 (UI shell): in progress.
+- Phase 1 (UI shell): **done**, awaiting review. All pages plus Settings (real data), command palette,
+  live panel over SSE, PWA. Pages other than Settings use sample data (`apps/web/lib/mock.ts`).
+- Next: Phase 2 (jobs, runs, dashboard) after "proceed".
