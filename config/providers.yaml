@@ -95,6 +95,11 @@ retry:
 # the router tries the other providers in the route first.
 near_limit_ratio: 0.8
 
+# After a 401/403 (bad or unsupported key), skip that provider for this long instead of
+# failing every call. It is retried automatically afterwards, and immediately on restart
+# (e.g. after you put a new key in .env).
+auth_failure_cooldown_s: 900
+
 # Task → ordered list of provider/model aliases (first = primary, rest = fallbacks).
 tasks:
   # Groq is primary for fast tasks; while GROQ_API_KEY is unset it is skipped, so Gemma
@@ -107,6 +112,7 @@ tasks:
     - { provider: groq, model: fast }
     - { provider: gemini, model: gemma }
     - { provider: gemini, model: lite }
+    - { provider: nvidia, model: chat }
   extract_from_document:
     - { provider: gemini, model: lite }
     - { provider: nvidia, model: chat }

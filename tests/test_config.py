@@ -58,3 +58,12 @@ def test_all_spec_prompt_files_exist() -> None:
         "second_opinion",
     ):
         assert (PROMPTS_DIR / f"{name}.md").exists()
+
+
+def test_every_gemini_route_can_fall_back_to_nvidia() -> None:
+    """Gemini keys may be unusable (AQ.-format issue); every route using it needs NVIDIA."""
+    cfg = load_providers()
+    for task, steps in cfg.tasks.items():
+        providers = [s.provider for s in steps]
+        if "gemini" in providers:
+            assert "nvidia" in providers, task

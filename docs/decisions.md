@@ -57,3 +57,11 @@ Choices not covered by SPEC.md, newest last. Each keeps v1 simple and v2 easy.
 **Gemini client is cached per event loop.** The SDK's async transport is bound to the loop that created it, and reusing it across loops (CLIs, tests) raised "Event loop is closed".
 
 **`make check-models`** compares configured model IDs with each provider's live model list. The Gemini embedding ID is ambiguous in the docs (`gemini-embedding-2` vs `gemini-embedding-2-preview`); this check will settle it once a Gemini key works.
+
+## Gemini unavailable for now (2026-10-05)
+
+**Status:** the owner's Gemini key is `AQ.`-format and is rejected with HTTP 401 (see above). Google Cloud Console may also issue `AQ.` keys, so Gemini is treated as **unavailable until a working key exists**. Nothing is removed: Gemini stays in every route and is used automatically once `.env` has a working key (restart the API to reload `.env`).
+
+**Every route that uses Gemini ends with NVIDIA**, and `tests/test_config.py` enforces it. Verified live with the `AQ.` key: `parse_mention`, `score_items`, `extract_from_document` (standard and deep), `analyze_outliers`, `second_opinion`, and `embed` all returned valid results via NVIDIA.
+
+**Auth-failure cooldown.** After a 401/403, the router skips that provider for `auth_failure_cooldown_s` (900 s) instead of paying for a rejected request on every call. It then tries again; a passing "Test connection" or an API restart clears the block immediately. While Gemini is down, NVIDIA's ~40 RPM is the bottleneck for scoring and extraction.

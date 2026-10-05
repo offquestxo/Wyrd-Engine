@@ -81,7 +81,12 @@ class GeminiProvider:
         json_schema: dict[str, Any] | None = None,
         extra: dict[str, Any] | None = None,
     ) -> ChatResult:
-        config: dict[str, Any] = {"system_instruction": system, "temperature": 0.2}
+        config: dict[str, Any] = {
+            "system_instruction": system,
+            "temperature": 0.2,
+            # no tools are passed; also silences the SDK's AFC warning
+            "automatic_function_calling": {"disable": True},
+        }
         if json_mode:
             config["response_mime_type"] = "application/json"
             if json_schema:
