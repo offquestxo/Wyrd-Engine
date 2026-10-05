@@ -61,6 +61,12 @@ def _get_pacer() -> _HostPacer:
     return _pacer
 
 
+def reset_pacer() -> None:
+    """Pick up edited sources.yaml intervals on the next request."""
+    global _pacer
+    _pacer = None
+
+
 def contact_user_agent() -> str:
     """UA with a contact address (SEC and Wikimedia both ask for one)."""
     return get_settings().sec_user_agent.strip().strip('"') or DEFAULT_UA
