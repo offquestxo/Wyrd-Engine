@@ -2,6 +2,10 @@
 # Free tiers change often: re-check the linked docs and edit here (or in Settings, Phase 1).
 # Limits are per model unless noted. Use null when a limit is unknown/not applicable.
 # Last verified: 2026-10-05.
+#
+# Availability (2026-10-05): Groq has no key (sign-up blocked) and Gemini keys are rejected
+# (AQ.-format key bug). Both stay in routes and are skipped automatically: a provider with no
+# key is skipped, and one whose key returns 401/403 is skipped for auth_failure_cooldown_s.
 
 providers:
   groq:
@@ -70,6 +74,41 @@ providers:
         extra: { input_type: passage, truncate: END }
         limits: { rpm: 40, rpd: null, tpm: null, tpd: null }
 
+  mistral:
+    # https://docs.mistral.ai/api/  — free ("Experiment") tier is set per workspace:
+    # 1 request/s, 500K tokens/min, 1B tokens/month (check admin.mistral.ai/plateforme/limits).
+    # Model aliases below are Mistral's "-latest" pointers; context is 256K tokens for both.
+    kind: openai_compat
+    base_url: https://api.mistral.ai/v1
+    api_key_env: MISTRAL_API_KEY
+    json_mode: true            # response_format={"type": "json_object"}
+    models:
+      small:
+        id: mistral-small-latest
+        max_request_tokens: 32000    # scoring/parsing batches; keeps requests quick
+        limits: { rpm: 60, rpd: null, tpm: 500000, tpd: null }
+      long:
+        id: mistral-medium-latest
+        max_request_tokens: 200000   # 256K context minus room for the answer
+        limits: { rpm: 60, rpd: null, tpm: 500000, tpd: null }
+      embed:
+        id: mistral-embed            # 1024-dim
+        limits: { rpm: 60, rpd: null, tpm: 500000, tpd: null }
+
+  openrouter:
+    # https://openrouter.ai/docs — free models (":free"): 20 req/min, 50 req/day
+    # (1,000/day once $10 of credits have been bought). Shared across all free models.
+    # Model chosen from the live list at https://openrouter.ai/api/v1/models (supports JSON mode).
+    kind: openai_compat
+    base_url: https://openrouter.ai/api/v1
+    api_key_env: OPENROUTER_API_KEY
+    json_mode: true
+    models:
+      free:
+        id: google/gemma-4-31b-it:free
+        max_request_tokens: 32000
+        limits: { rpm: 20, rpd: 50, tpm: null, tpd: null }
+
   youtube:
     # https://developers.google.com/youtube/v3/determine_quota_cost
     # NOTE: search.list now costs 1 unit but has its own cap of 100 calls/day.
@@ -102,31 +141,38 @@ auth_failure_cooldown_s: 900
 
 # Task → ordered list of provider/model aliases (first = primary, rest = fallbacks).
 tasks:
-  # Groq is primary for fast tasks; while GROQ_API_KEY is unset it is skipped, so Gemma
-  # leads automatically. Setting the key makes Groq primary again with no config change.
+  # Groq and Gemini lead where they were primary before; while unavailable they are
+  # skipped, so the effective order is the one after them. Reorder freely.
   score_items:
     - { provider: groq, model: fast }
     - { provider: gemini, model: gemma }
+    - { provider: mistral, model: small }
     - { provider: nvidia, model: chat }
+    - { provider: openrouter, model: free }
   parse_mention:
     - { provider: groq, model: fast }
     - { provider: gemini, model: gemma }
-    - { provider: gemini, model: lite }
+    - { provider: mistral, model: small }
     - { provider: nvidia, model: chat }
+    - { provider: openrouter, model: free }
   extract_from_document:
     - { provider: gemini, model: lite }
+    - { provider: mistral, model: long }
     - { provider: nvidia, model: chat }
   extract_from_document_deep:      # @researcher depth=deep only
     - { provider: gemini, model: flash }
-    - { provider: gemini, model: lite }
+    - { provider: mistral, model: long }
     - { provider: nvidia, model: chat }
   analyze_outliers:
     - { provider: gemini, model: lite }
     - { provider: groq, model: smart }
+    - { provider: mistral, model: long }
     - { provider: nvidia, model: chat }
   second_opinion:
     - { provider: nvidia, model: chat }
+    - { provider: mistral, model: long }
     - { provider: gemini, model: lite }
   embed:
     - { provider: nvidia, model: embed }
+    - { provider: mistral, model: embed }
     - { provider: gemini, model: embed }

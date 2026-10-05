@@ -20,6 +20,7 @@ from apps.api.providers.base import (
 class OpenAICompatProvider:
     name = "openai_compat"
     supports_embeddings = False
+    send_encoding_format = True  # some APIs (Mistral) don't take encoding_format
 
     def __init__(
         self,
@@ -115,7 +116,9 @@ class OpenAICompatProvider:
     ) -> EmbedResult:
         if not self.supports_embeddings:
             raise ProviderError(self.name, "embeddings not supported")
-        body: dict[str, Any] = {"model": model, "input": texts, "encoding_format": "float"}
+        body: dict[str, Any] = {"model": model, "input": texts}
+        if self.send_encoding_format:
+            body["encoding_format"] = "float"
         body.update(extra or {})
         if dimensions:
             body["dimensions"] = dimensions

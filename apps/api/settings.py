@@ -20,6 +20,11 @@ class Settings(BaseSettings):
     groq_api_key: str = ""
     gemini_api_key: str = ""
     nvidia_api_key: str = ""
+    mistral_api_key: str = ""
+    openrouter_api_key: str = ""
+    # "api_key" (default) or "oauth": use gcloud Application Default Credentials for Gemini.
+    gemini_auth: str = "api_key"
+    google_cloud_quota_project: str = ""
     youtube_api_key: str = ""
     courtlistener_token: str = ""
     notion_token: str = ""

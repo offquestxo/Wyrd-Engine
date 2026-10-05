@@ -94,7 +94,7 @@ async def test_youtube() -> None:
     assert info.uploads_playlist_id.startswith("UU")
 
 
-@pytest.mark.parametrize("provider", ["groq", "gemini", "nvidia"])
+@pytest.mark.parametrize("provider", ["groq", "gemini", "nvidia", "mistral", "openrouter"])
 async def test_provider_connection(provider: str) -> None:
     router = get_router()
     if not router.providers[provider].configured:
