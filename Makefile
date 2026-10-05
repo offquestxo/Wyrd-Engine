@@ -9,12 +9,12 @@ setup:
 
 dev:
 	@trap 'kill 0' INT TERM EXIT; \
-	uv run uvicorn apps.api.main:app --host 127.0.0.1 --port 8000 --reload --reload-dir apps/api & \
+	uv run uvicorn apps.api.main:app --host 127.0.0.1 --port 8000 --reload --reload-dir apps/api --timeout-graceful-shutdown 3 & \
 	(cd apps/web && pnpm dev) & \
 	wait
 
 api:
-	uv run uvicorn apps.api.main:app --host 127.0.0.1 --port 8000 --reload --reload-dir apps/api
+	uv run uvicorn apps.api.main:app --host 127.0.0.1 --port 8000 --reload --reload-dir apps/api --timeout-graceful-shutdown 3
 
 web:
 	cd apps/web && pnpm dev

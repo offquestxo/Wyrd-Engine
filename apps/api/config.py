@@ -89,3 +89,28 @@ def load_sources(config_dir: Path | None = None) -> SourcesConfig:
 def load_yaml(name: str, config_dir: Path | None = None) -> dict[str, Any]:
     """Untyped access for channels.yaml / scoring.yaml until their agents land."""
     return _read_yaml(name, config_dir)
+
+
+class ChannelEntry(BaseModel):
+    handle: str = Field(pattern=r"^@[\w.\-]+$")
+    name: str
+
+
+class ChannelsConfig(BaseModel):
+    channels: list[ChannelEntry]
+
+
+class ScoringConfig(BaseModel):
+    dedup: dict[str, float]
+    scout: dict[str, Any]
+    gap_finder: dict[str, Any]
+    outlier: dict[str, float | int]
+    series: list[str]
+
+
+def load_channels(config_dir: Path | None = None) -> ChannelsConfig:
+    return ChannelsConfig.model_validate(_read_yaml("channels.yaml", config_dir))
+
+
+def load_scoring(config_dir: Path | None = None) -> ScoringConfig:
+    return ScoringConfig.model_validate(_read_yaml("scoring.yaml", config_dir))
