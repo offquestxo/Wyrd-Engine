@@ -1,0 +1,49 @@
+# Scout sources (SPEC §6.1). Edit freely; Settings will edit this file in Phase 1.
+
+http:
+  timeout_s: 20
+  # Minimum seconds between requests per host (politeness / documented limits).
+  min_interval_s:
+    sec.gov: 0.15            # SEC fair access: max 10 req/s
+    efts.sec.gov: 0.15
+    data.sec.gov: 0.15
+    api.gdeltproject.org: 5.5  # GDELT asks for at most one request every 5 s
+    www.reddit.com: 2.0
+    www.courtlistener.com: 1.0
+    www.loc.gov: 1.0
+    default: 0.2
+
+news:
+  google_news_queries:
+    - "company bankruptcy"
+    - "accounting fraud SEC charges"
+    - "startup shuts down"
+    - "CEO indicted"
+    - "company collapse"
+  press_feeds:
+    - { name: SEC press releases, url: "https://www.sec.gov/news/pressreleases.rss" }
+    - { name: DOJ press releases, url: "https://www.justice.gov/news/rss?type=press_release&m=1" }
+  edgar_full_text_queries:
+    - { q: "\"going concern\"", forms: "8-K" }
+    - { q: "\"Chapter 11\"", forms: "8-K" }
+  hackernews_queries:
+    - "shut down"
+    - "acquired"
+    - "post-mortem"
+  subreddits:
+    - business
+    - Entrepreneur
+    - wallstreetbets
+  gdelt_queries:
+    - "corporate fraud"
+    - "bankruptcy filing"
+
+evergreen:
+  wikipedia_categories:
+    - "Category:Defunct retail companies of the United States"
+    - "Category:Companies that filed for Chapter 11 bankruptcy in 2008"
+    - "Category:Companies that filed for Chapter 11 bankruptcy in 2009"
+    - "Category:Corporate scandals"
+    - "Category:Defunct technology companies of the United States"
+  pageview_days: 60
+  top_n_for_youtube_check: 20

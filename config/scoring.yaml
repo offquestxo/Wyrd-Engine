@@ -1,0 +1,35 @@
+# Thresholds and rubric weights (SPEC §6.1, §6.2).
+
+dedup:
+  embedding_cosine_threshold: 0.88   # items at or above this similarity are treated as duplicates
+
+scout:
+  default_limit: 25
+  score_batch_size: 10
+  rubric_weights:
+    drama: 1.0
+    twist: 1.0
+    relatability: 1.0
+    visual_potential: 0.8
+    hook_number: 0.8
+    freshness: 1.0
+
+gap_finder:
+  youtube_view_threshold: 100000     # a video above this many views counts as existing coverage
+  weights:
+    story_quality: 0.5
+    article_richness: 0.2
+    low_coverage: 0.3
+
+outlier:
+  default_threshold: 3.0
+  default_videos_per_channel: 50
+  shorts_max_duration_s: 180         # YouTube Shorts can be up to 3 minutes (re-verify in Phase 4)
+
+series:
+  - Childhood Brands
+  - Tech Graveyard
+  - Fraud Files
+  - Everyday Genius
+  - Comebacks
+  - Recent Collapses

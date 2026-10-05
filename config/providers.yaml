@@ -1,0 +1,106 @@
+# Provider routing, model IDs, and free-tier limits.
+# Free tiers change often: re-check the linked docs and edit here (or in Settings, Phase 1).
+# Limits are per model unless noted. Use null when a limit is unknown/not applicable.
+# Last verified: 2026-10-05.
+
+providers:
+  groq:
+    # https://console.groq.com/docs/models  and  https://console.groq.com/docs/rate-limits
+    kind: openai_compat
+    base_url: https://api.groq.com/openai/v1
+    api_key_env: GROQ_API_KEY
+    json_mode: true            # supports response_format={"type": "json_object"}
+    models:
+      fast:
+        id: openai/gpt-oss-20b
+        limits: { rpm: 30, rpd: 1000, tpm: 8000, tpd: 200000 }
+      smart:
+        id: openai/gpt-oss-120b
+        limits: { rpm: 30, rpd: 1000, tpm: 8000, tpd: 200000 }
+
+  gemini:
+    # https://ai.google.dev/gemini-api/docs/models  and  /pricing (free tier).
+    # Google no longer publishes per-model free-tier numbers in docs; they are shown in
+    # AI Studio (https://aistudio.google.com/rate-limit). Values below are conservative
+    # placeholders — replace them with what AI Studio shows for your project.
+    kind: gemini
+    api_key_env: GEMINI_API_KEY
+    json_mode: true            # response_mime_type=application/json + response_json_schema
+    models:
+      flash:
+        id: gemini-3.8-flash
+        limits: { rpm: 10, rpd: 250, tpm: 250000, tpd: null }
+      lite:
+        id: gemini-3.5-flash-lite
+        limits: { rpm: 15, rpd: 1000, tpm: 250000, tpd: null }
+      embed:
+        id: gemini-embedding-2
+        dimensions: 2048
+        limits: { rpm: 100, rpd: 1000, tpm: 30000, tpd: null }
+
+  nvidia:
+    # https://docs.api.nvidia.com/nim/reference/llm-apis  and  /retrieval-apis
+    # Free credits; ~40 requests/min account-wide (community-observed, not an official SLA).
+    kind: openai_compat
+    base_url: https://integrate.api.nvidia.com/v1
+    api_key_env: NVIDIA_API_KEY
+    json_mode: false           # JSON requested via prompt; validated + repaired by the router
+    models:
+      # IDs checked against the live list at https://integrate.api.nvidia.com/v1/models
+      chat:
+        id: nvidia/nemotron-3-super-120b-a12b
+        # Reasoning is on by default for this model; off keeps second opinions fast.
+        extra: { chat_template_kwargs: { enable_thinking: false } }
+        limits: { rpm: 40, rpd: null, tpm: null, tpd: null }
+      embed:
+        id: nvidia/nemotron-3-embed-1b      # 2048-dim output
+        # NIM retrieval-embedding convention; confirm with "Test connection" once a key is set.
+        extra: { input_type: passage, truncate: END }
+        limits: { rpm: 40, rpd: null, tpm: null, tpd: null }
+
+  youtube:
+    # https://developers.google.com/youtube/v3/determine_quota_cost
+    # NOTE: search.list now costs 1 unit but has its own cap of 100 calls/day.
+    kind: quota_only
+    api_key_env: YOUTUBE_API_KEY
+    limits:
+      units_per_day: 10000
+      search_calls_per_day: 100
+
+  claude:
+    # Pro plan usage is not exposed programmatically; tracked locally as runs.
+    kind: quota_only
+    limits:
+      daily_soft_cap_runs: 20
+
+# Retry policy for 429 / 5xx / timeouts, per provider attempt.
+retry:
+  max_attempts: 3
+  base_delay_s: 1.0
+  max_delay_s: 20.0
+
+# When a model has used this fraction of any known limit, the router tries the
+# other providers in the route first.
+near_limit_ratio: 0.9
+
+# Task → ordered list of provider/model aliases (first = primary, rest = fallbacks).
+tasks:
+  score_items:
+    - { provider: groq, model: fast }
+    - { provider: gemini, model: lite }
+    - { provider: nvidia, model: chat }
+  parse_mention:
+    - { provider: groq, model: fast }
+    - { provider: gemini, model: lite }
+  extract_from_document:
+    - { provider: gemini, model: flash }
+    - { provider: nvidia, model: chat }
+  analyze_outliers:
+    - { provider: gemini, model: flash }
+    - { provider: groq, model: smart }
+  second_opinion:
+    - { provider: nvidia, model: chat }
+    - { provider: gemini, model: flash }
+  embed:
+    - { provider: nvidia, model: embed }
+    - { provider: gemini, model: embed }
