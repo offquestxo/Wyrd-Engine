@@ -32,6 +32,12 @@ KEYS: list[dict[str, Any]] = [
     {"env": "GROQ_API_KEY", "provider": "groq", "purpose": "Fast scoring, @mention parsing"},
     {"env": "GEMINI_API_KEY", "provider": "gemini", "purpose": "Long documents, outlier analysis"},
     {"env": "NVIDIA_API_KEY", "provider": "nvidia", "purpose": "Second opinions, embeddings"},
+    {
+        "env": "MISTRAL_API_KEY",
+        "provider": "mistral",
+        "purpose": "Scoring, long documents, outliers",
+    },
+    {"env": "OPENROUTER_API_KEY", "provider": "openrouter", "purpose": "Free-model fallback"},
     {"env": "YOUTUBE_API_KEY", "provider": "youtube", "purpose": "@outlier stats, gap finder"},
     {"env": "COURTLISTENER_TOKEN", "provider": None, "purpose": "Court records (optional)"},
     {"env": "NOTION_TOKEN", "provider": None, "purpose": "Notion sync (optional, Phase 7)"},

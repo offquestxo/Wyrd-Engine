@@ -60,10 +60,12 @@ def test_all_spec_prompt_files_exist() -> None:
         assert (PROMPTS_DIR / f"{name}.md").exists()
 
 
-def test_every_gemini_route_can_fall_back_to_nvidia() -> None:
-    """Gemini keys may be unusable (AQ.-format issue); every route using it needs NVIDIA."""
+def test_every_route_has_a_currently_working_provider() -> None:
+    """Groq has no key and Gemini keys are rejected (2026-10); every task must still have
+    NVIDIA or Mistral to fall back on."""
     cfg = load_providers()
     for task, steps in cfg.tasks.items():
-        providers = [s.provider for s in steps]
-        if "gemini" in providers:
+        providers = {s.provider for s in steps}
+        assert providers & {"nvidia", "mistral"}, task
+        if "gemini" in providers or "groq" in providers:
             assert "nvidia" in providers, task

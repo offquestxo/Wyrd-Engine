@@ -221,7 +221,9 @@ class Router:
         caps = [
             self.config.model(step.provider, step.model).max_request_tokens
             for step in self.config.tasks.get(task, [])
-            if (p := self.providers.get(step.provider)) is not None and p.configured
+            if (p := self.providers.get(step.provider)) is not None
+            and p.configured
+            and not self.auth_blocked(step.provider)
         ]
         known = [cap for cap in caps if cap]
         return min(known) if known else None
@@ -496,16 +498,25 @@ class Router:
 # ---------------------------------------------------------------------- default instance
 def build_providers(config: ProvidersConfig) -> dict[str, LLMProvider]:
     from apps.api.providers.gemini import GeminiProvider
+    from apps.api.providers.gemini_oauth import GeminiOAuthProvider
     from apps.api.providers.groq import GroqProvider
+    from apps.api.providers.mistral import MistralProvider
     from apps.api.providers.nvidia import NvidiaProvider
+    from apps.api.providers.openai_compat import OpenAICompatProvider
+    from apps.api.providers.openrouter import OpenRouterProvider
     from apps.api.settings import get_settings
 
+    simple: dict[str, type[OpenAICompatProvider]] = {
+        "groq": GroqProvider,
+        "mistral": MistralProvider,
+        "openrouter": OpenRouterProvider,
+    }
     settings = get_settings()
     built: dict[str, LLMProvider] = {}
     for name, pc in config.providers.items():
         key = settings.key_for(pc.api_key_env) if pc.api_key_env else ""
-        if name == "groq":
-            built[name] = GroqProvider(
+        if name in simple:
+            built[name] = simple[name](
                 base_url=pc.base_url or "", api_key=key, api_key_env=pc.api_key_env or ""
             )
         elif name == "nvidia":
@@ -517,6 +528,8 @@ def build_providers(config: ProvidersConfig) -> dict[str, LLMProvider]:
                 probe_model=embed.id if embed else "",
                 probe_extra=embed.extra if embed else None,
             )
+        elif name == "gemini" and settings.gemini_auth.strip().lower() == "oauth":
+            built[name] = GeminiOAuthProvider(quota_project=settings.google_cloud_quota_project)
         elif name == "gemini":
             built[name] = GeminiProvider(api_key=key, api_key_env=pc.api_key_env or "")
     return built
