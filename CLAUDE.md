@@ -80,4 +80,9 @@ You are building and maintaining the wyrd.exe story engine: a local app that fin
   token-guarded), `claude -p` stream-json turns with one resumed session per chat and an MCP-only
   allowlist, @mention fast path (no Claude), plan + result cards, results fed back to the orchestrator,
   hybrid memory search, Claude meter with soft cap. Browser calls the API through Next's `/api` proxy.
-- Phase 6 (@researcher): **in progress** (docs/phase6-progress.md).
+- Phase 6 (@researcher): **done**, awaiting review (not pushed). Headless Claude researcher
+  (`agents/researcher.py`, `.claude/agents/researcher.md`) with per-depth turn budgets, researcher MCP
+  tools at `/mcp-research` (source_* per module, extract_from_document, second_opinion, save_dossier),
+  structured dossiers with excerpt/figure/prose-number checks, export to research/<slug>/, real Research
+  page. Live: Circuit City standard dossier, 31/32 claims verified, 34/40 Claude turns.
+- Next: Phase 7 (Notion sync) after "proceed".

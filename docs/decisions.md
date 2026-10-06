@@ -343,3 +343,20 @@ The owner needs to activate the free Experiment plan (or check limits) at `admin
 - **Open exported file** asks the API to reveal the file in Finder (`open -R`). It's a local single-user app, and the endpoint only opens the dossier's own export path.
 - "Research this" in the story drawer and `@researcher` in Chat both create plan cards. The card shows depth, sources and the Claude turn budget.
 - `lib/mock.ts`, `useDemo` and the sample badge are gone; no page uses sample data now.
+
+**Prose number check (added after the live run):** numbers in the Summary, Twist, Story Beats, Hook Ideas and angles must appear in a cited source's text. The match allows filings' "in thousands" tables and the prose's rounding, so "$12.43 billion" matches "12,429,754". Single digits and years are skipped. Unmatched numbers stay in the prose but are listed under Open Questions, and counted separately (`prose_numbers_unverified`). The first live dossier had only the row checks, because its prose included figures (store and employee counts) that no row covered. A dry run of the new check on that dossier found all of them in cited sources.
+
+**Unreadable links fail fast:**
+- Google News results are redirect wrappers the engine can't fetch, and the researcher wasted a turn on one. `extract_from_document` now refuses them up front, with a note to use the publisher's URL.
+- CourtListener docket pages return 403 to plain fetches; this now gives a clear note too.
+
+**Live acceptance: standard-depth Circuit City (run #10, 2026-10-06):**
+- Started from Chat with `@researcher Circuit City, standard depth`. The fast path made the plan card with no Claude call; it showed depth, sources and the 40-turn budget.
+- **Claude:** 34 of 40 turns, 393 s, 432K tokens in / 17.6K out, Sonnet. The run log has one usage row (`task=researcher`).
+- **Tool calls:** 13 extractions, 9 EDGAR, 3 news, 2 Wikipedia, and one each of CourtListener, Internet Archive, Wayback, Yahoo, second opinion and save.
+- **Extraction:** the FY2008 and FY2007 10-Ks (~326K characters each) went through `extract_from_document`, giving 7 and 5 exact quotes. The FY2006 10-K gave none.
+- **Dossier v1** has 17 Timeline items, 8 Key Numbers, 5 Key People and 5 sources, 4 of them primary (two 10-Ks, two 8-Ks).
+- **Excerpt check:** 31 passed, 1 moved to Open Questions. The failure was the Blockbuster bid row: after the second opinion's pre-check failed it, the researcher "fixed" it with wording that isn't literally on the page, and the check on save caught it. An independent re-check of all 31 against freshly fetched sources passed 31/31. The longest excerpt is 36 words.
+- **Second opinion** (NVIDIA): 7 flags, 0 high. They were resolved as 4 softened ("#2 retailer" claims, causal language), 1 removed (CarMax market value), 1 rewritten (the "60 days" hook), and 1 fixed (the Blockbuster excerpt, which was then moved by the check).
+- **Exported** to `research/circuit-city/`, and viewable on the Research page.
+- **Source notes:** Circuit City has no EDGAR XBRL facts (pre-2009), so financials came from the 10-K text. One Google News link and one CourtListener docket page couldn't be fetched (the fail-fast notes above came from this).

@@ -27,8 +27,10 @@ Resume note in case a session hits the usage limit.
 - [x] research/ (texts, checks, render, export, save) + tests
 - [x] MCP researcher tools + tests (separate /mcp-research endpoint)
 - [x] researcher runner + agent def + prompt + tests (97fc7af)
-- [ ] Frontend: Research page, Research this, plan card estimate
-- [ ] Live: one standard Circuit City run
+- [x] Frontend: Research page, Research this, plan card estimate (69c805b)
+- [x] Live: one standard Circuit City run (run #10; results in decisions.md)
+- [x] Prose number check + fail-fast links (f18938d)
+- [ ] Owner review; push after approval
 
 ## Chat-test hang log (Phase 5 carry-over)
-Not seen again so far in Phase 6.
+Not seen again during Phase 6: every pytest run completed (about 25 full and partial runs).
