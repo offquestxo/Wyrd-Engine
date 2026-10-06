@@ -39,6 +39,8 @@ const EVENT_TYPES = [
   "chat.delta",
   "chat.status",
   "chat.tool",
+  "notion.sync",
+  "dossier.saved",
 ]
 const MAX_EVENTS = 300
 // Streaming text deltas are delivered to listeners but not kept in the shared history.

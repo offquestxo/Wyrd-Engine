@@ -371,3 +371,32 @@ export interface DossierDetail extends DossierSummary {
   } | null
   checks: Record<string, unknown> | null
 }
+
+// --- Phase 7: Notion sync --------------------------------------------------------
+export interface NotionSyncReport {
+  ok: boolean
+  mode: string
+  started_at: string
+  finished_at: string | null
+  pulled: { story_id: number; title: string; from: Record<string, unknown>; to: Record<string, unknown> }[]
+  created: number
+  updated: number
+  unchanged: number
+  conflicts_local_won: number
+  ignored_pages: number
+  requests: number
+  errors: string[]
+}
+
+export interface NotionStatus {
+  configured: boolean
+  token_set: boolean
+  database_set: boolean
+  auto_sync: boolean
+  syncing: boolean
+  stories: number
+  linked: number
+  pending: number
+  last_sync: NotionSyncReport | null
+  version: string
+}
