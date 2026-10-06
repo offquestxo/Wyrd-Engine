@@ -78,7 +78,14 @@ class StoryBeats(BaseModel):
 
 class Resolution(BaseModel):
     claim: str
-    action: Literal["fixed", "softened", "moved_to_open_questions", "removed", "kept"]
+    action: Literal[
+        "fixed",
+        "softened",
+        "labelled_interpretation",
+        "moved_to_open_questions",
+        "removed",
+        "kept",
+    ]
     note: str = ""
 
 

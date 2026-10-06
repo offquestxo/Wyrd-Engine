@@ -493,6 +493,55 @@ async def test_extract_keeps_document_for_excerpt_check(research_env: Any) -> No
     assert research_env["router"].extract_calls[0]["deep"] is False  # standard depth
 
 
+async def test_interpretation_flags_must_be_resolved_before_saving(research_env: Any) -> None:
+    async def opinion(markdown: str) -> SecondOpinion:
+        assert "## Story Beats" in markdown  # prose is reviewed too
+        return SecondOpinion(
+            flags=[
+                {
+                    "claim": "missing the housing boom",
+                    "issue": "cause stated as fact",
+                    "severity": "medium",
+                    "suggestion": "label",
+                    "kind": "interpretation",
+                },
+                {
+                    "claim": "customer service deteriorated",
+                    "issue": "no source",
+                    "severity": "medium",
+                    "suggestion": "label",
+                    "kind": "interpretation",
+                },
+            ],
+            overall="ok",
+        )
+
+    research_env["router"].second_opinion = opinion
+    payload = {"dossier": make_dossier().model_dump()}
+    async with research_client() as c:
+        review = (await c.call_tool("second_opinion", payload)).data
+        assert [f["kind"] for f in review["flags"]] == ["interpretation", "interpretation"]
+        with pytest.raises(Exception, match="2 flags, 1 resolutions"):
+            await c.call_tool("save_dossier", payload)
+        fixed = make_dossier().model_dump()
+        fixed["second_opinion_resolutions"] += [
+            {
+                "claim": "missing the housing boom",
+                "action": "labelled_interpretation",
+                "note": "Our read: …",
+            }
+        ]
+        saved = (await c.call_tool("save_dossier", {"dossier": fixed})).data
+    assert saved["version"] == 1
+
+
+def test_second_opinion_prompt_covers_prose_interpretation() -> None:
+    from apps.api import prompts
+
+    text = prompts.render("second_opinion", output_schema="{}")
+    assert "interpretation" in text and "Story Beats" in text and "Our read" in text
+
+
 async def test_save_requires_second_opinion_then_reports_checks(research_env: Any) -> None:
     payload = {"dossier": make_dossier().model_dump()}
     async with research_client() as c:
