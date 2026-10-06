@@ -27,12 +27,14 @@ AQ_KEY_HINT = (
     "HTTP 401: this GEMINI_API_KEY is a new 'AQ.'-format key, which the Gemini API currently "
     "rejects (known Google issue). Create a standard 'AIza' key in Google Cloud Console "
     "(APIs & Services > Credentials > Create credentials > API key, restricted to the "
-    "Generative Language API) in your AI Studio project, and put it in .env."
+    "Generative Language API) in your AI Studio project, and put it in .env — or use OAuth "
+    "instead: set GEMINI_AUTH=oauth in .env after the gcloud setup in the README."
 )
 
 
 class GeminiProvider:
     name = "gemini"
+    auth_mode = "api_key"
 
     def __init__(self, *, api_key: str, api_key_env: str = "GEMINI_API_KEY") -> None:
         self._api_key = api_key

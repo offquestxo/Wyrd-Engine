@@ -124,3 +124,43 @@ def test_camelize() -> None:
         "thinkingConfig": {"thinkingLevel": "x"},
         "a": [{"bC": 1}],
     }
+
+
+def test_gemini_auth_oauth_takes_priority_over_api_key(env: pytest.MonkeyPatch) -> None:
+    from google.auth.exceptions import DefaultCredentialsError
+
+    from apps.api.config import load_providers
+    from apps.api.providers import gemini_oauth
+    from apps.api.providers.gemini import GeminiProvider
+    from apps.api.providers.router import build_providers
+
+    def no_adc(*_a: Any, **_k: Any) -> Any:
+        raise DefaultCredentialsError("none")
+
+    env.setattr(gemini_oauth.google.auth, "default", no_adc)
+    env.setenv("GEMINI_API_KEY", "AQ.some-key")
+    env.setenv("GEMINI_AUTH", "oauth")
+    built = build_providers(load_providers())
+    assert isinstance(built["gemini"], GeminiOAuthProvider)
+    assert built["gemini"].configured is False  # no ADC on this machine → skipped, not API key
+
+    env.setenv("GEMINI_AUTH", "api_key")
+    from apps.api.settings import get_settings
+
+    get_settings.cache_clear()
+    assert isinstance(build_providers(load_providers())["gemini"], GeminiProvider)
+
+
+async def test_connection_test_reports_auth_mode_and_oauth_setup_hint() -> None:
+    from google.auth.exceptions import DefaultCredentialsError
+
+    from apps.api.config import load_providers
+    from apps.api.providers.router import Router
+
+    def missing() -> Any:
+        raise DefaultCredentialsError("none")
+
+    router = Router(load_providers(), {"gemini": GeminiOAuthProvider(loader=missing)}, None)
+    result = await router.test_connection("gemini")
+    assert result.auth == "oauth (ADC)" and not result.ok
+    assert "Application Default Credentials" in result.detail

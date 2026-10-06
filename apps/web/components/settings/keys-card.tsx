@@ -90,6 +90,7 @@ export function KeysCard() {
                       {k.last_test && (
                         <p className={cn("line-clamp-3 max-w-72 text-left text-[11px] leading-4", k.last_test.ok ? "text-success" : "text-destructive")} title={k.last_test.detail}>
                           {k.last_test.ok ? `OK · ${k.last_test.latency_ms} ms` : k.last_test.detail}
+                          {k.last_test.auth && <span className="text-muted-foreground"> · via {k.last_test.auth}</span>}
                         </p>
                       )}
                     </div>

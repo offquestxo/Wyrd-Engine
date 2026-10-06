@@ -57,6 +57,7 @@ class ConnectionTest(BaseModel):
     ok: bool
     detail: str
     latency_ms: int = 0
+    auth: str | None = None  # how the provider authenticated, e.g. "api_key" or "oauth (ADC)"
 
 
 class LLMProvider(Protocol):
