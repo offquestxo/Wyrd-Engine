@@ -291,3 +291,55 @@ The owner needs to activate the free Experiment plan (or check limits) at `admin
 - A **new chat** recalled them through `search_memory` + `list_runs` + `get_run`.
 - `@scout 5 news stories about restaurant chains` and `@outlier scan @MagnatesMedia shorts only` each produced a plan card with **no Claude call** (Claude row count unchanged at 5). Both test plans were cancelled.
 - Claude usage for all of Phase 5's live testing: 5 calls, 11 turns, 40 s, all on Sonnet.
+
+## Phase 6: @researcher (2026-10-06)
+
+**How it runs:** an approved @researcher step is a job-runner agent (`agents/researcher.py`) that starts `claude -p --agents <json> --agent researcher`.
+- The JSON is built from `.claude/agents/researcher.md` (name, description, tools, model) plus the rendered `prompts/researcher.md` as its prompt. This was checked with a Haiku probe: the inline agent's model and prompt apply, and only WebSearch/WebFetch are present among built-in tools.
+- Defining the agent inline lets the working directory stay outside the repo, so the project CLAUDE.md isn't loaded. The `.md` file is still the source of truth for the definition.
+- Flags beyond the orchestrator's: `--tools WebSearch,WebFetch` (no shell, no file access), `--allowedTools` = researcher MCP tools + WebSearch + WebFetch, `--no-session-persistence`, `--model sonnet --effort medium` (`scoring.yaml` research).
+
+**Turn budgets** (`scoring.yaml` research.depths): quick 20, standard 40, deep 70 Claude turns, where one turn is one model call.
+- Each budget is passed as the agent's `maxTurns` and also enforced by the engine. It counts assistant message ids in the stream and stops the process once the budget is exceeded (`stream_claude(max_turns=…)`, shared with chat).
+- The prompt states the budget and reserves the last 8 turns for draft, second opinion and save.
+- Each run logs one `provider_usage` row (provider `claude`, task `researcher`: turns, duration, tokens), even when it fails. The run summary reports the same.
+- The Claude meter now counts every `claude` usage row (chat turns + research runs) instead of adding agent-run counts.
+
+**Separate MCP endpoint for research tools:** `/mcp-research` serves only the researcher's tools, and `/mcp` keeps the orchestrator's 7. Both servers are named `wyrd`, so tool names stay `mcp__wyrd__…`. Splitting them keeps the ~17 research tool schemas out of every chat turn's context; an allowlist alone would still have listed them. Runs pass `X-Wyrd-Run`, and tools use it to find the run's session (`research/session.py`).
+
+**Tools:**
+- **One `source_<module>` per sources/ module**, with an `action` parameter where a module has several functions (edgar, wikipedia, wayback, yahoo).
+- **Depth limits:** a source outside the run's depth list is refused with a clear message. YouTube is deep-only and capped at 2 searches per run.
+- **Known source limits** are logged once per run and listed in the run summary:
+  - Yahoo has no data for delisted companies (use EDGAR).
+  - GDELT only covers about 3 months.
+  - LoC newspapers cover 1770–1963 only; a later start year is refused.
+  - EDGAR has no XBRL facts before about 2009.
+- **`extract_from_document(url_or_text, question)`** fetches the URL server-side (SEC User-Agent and pacing apply; HTML, PDF via `pypdf`, or text) and keeps the full text in the run session for the excerpt check. It returns only quotes that are literally in the document. Depth `deep` uses the `extract_from_document_deep` route.
+- **`second_opinion(dossier)`** runs the router's second opinion (NVIDIA, then Mistral, then Gemini) on a rendered draft. It also runs the excerpt check early, so the researcher can fix failing rows before saving.
+- **`save_dossier(dossier)`** refuses until `second_opinion` has been called in the same run.
+
+**Extraction routing by daily headroom** (`providers.yaml` `headroom_tasks`):
+- For extraction routes, the model with the largest share of its daily request limit left goes first. Ties keep config order, and models without a daily limit go last.
+- The deep route now lists Flash (20/day), then Flash-Lite (500/day), then Mistral and NVIDIA. Flash leads only while it has more headroom than Flash-Lite.
+- The existing near-limit and auth-cooldown rules still apply.
+
+**Dossiers are saved as structured JSON, not free markdown** (SPEC said `save_dossier(story_id, markdown, sources_json)`). The researcher submits summary, twist, timeline, people, key numbers, beats, hooks, angles, open questions, numbered sources and second-opinion resolutions. The engine renders the SPEC §6.3 template from that. This makes each fact mechanically checkable, and stores Key Numbers and Timeline as data for v2 @graphics (the Phase 4 note). The DB gains `dossiers.data`, `checks`, `run_id` and `export_path` (migration 0006).
+
+**Integrity checks on save** (`research/dossier.py`):
+1. **Excerpt cap:** `excerpt_max_words` (40). Longer excerpts are cut to a prefix, which is still a literal quote.
+2. **Excerpt check:** the excerpt must be a substring of the cited source's text after normalization: HTML entities, NFKC, curly quotes, dashes, non-breaking spaces, case, whitespace, and "$ 11,744" → "$11,744". An excerpt with an ellipsis passes if each part of 3+ words appears in order. The source text is what the run already fetched, or the URL is fetched at save time. WebFetch content is never trusted, since it's a summary.
+3. **Figure check** (Key Numbers): every non-year number in the figure must appear in its excerpt, by leading significant digits with half-up rounding, so "$11.7 billion" matches "11,744". A figure made only of years must match a year.
+4. **Failures:** any Timeline item, Key Number, Twist or person (when cited) that fails is removed from the facts. It is listed under "Open Questions / Unverified" with the reason. A failed Twist becomes "Unverified: see Open Questions."
+5. **Primary marking:** sources on `primary_domains` (sec.gov, courtlistener.com, web.archive.org, archive.org, loc.gov, justice.gov, …) are marked primary by the engine, in Sources and `sources.json`. The model's own claim isn't trusted.
+6. **Scout hooks** go to the researcher as `scout_hook_UNVERIFIED_LEAD`, and the prompt says to confirm them or leave them out. The check above makes any number in the dossier come from a fetched source.
+
+**Export:** `research/<slug>/dossier.md` and `sources.json` (git-tracked). `sources.json` records, per source, the source type and how many claims were checked and verified. New sources are added to `story_sources` (`added_by=researcher`).
+
+**Story status:** an approved research run moves an Inbox or Shortlisted story to Researching, since approving the plan is the owner's decision. Later statuses are left alone. A topic with no matching story creates one.
+
+**Research page:**
+- Real data: dossier list (latest version per story), markdown viewer, version picker, a sources sidebar showing primary sources and per-source verified counts, and the second-opinion flags with their resolutions.
+- **Open exported file** asks the API to reveal the file in Finder (`open -R`). It's a local single-user app, and the endpoint only opens the dossier's own export path.
+- "Research this" in the story drawer and `@researcher` in Chat both create plan cards. The card shows depth, sources and the Claude turn budget.
+- `lib/mock.ts`, `useDemo` and the sample badge are gone; no page uses sample data now.

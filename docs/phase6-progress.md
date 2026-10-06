@@ -26,7 +26,7 @@ Resume note in case a session hits the usage limit.
 - [x] Config + router headroom ordering (840f98f)
 - [x] research/ (texts, checks, render, export, save) + tests
 - [x] MCP researcher tools + tests (separate /mcp-research endpoint)
-- [ ] researcher runner + agent def + prompt + tests
+- [x] researcher runner + agent def + prompt + tests (97fc7af)
 - [ ] Frontend: Research page, Research this, plan card estimate
 - [ ] Live: one standard Circuit City run
 

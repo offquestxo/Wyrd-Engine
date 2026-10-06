@@ -16,6 +16,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Annotated, Any, Literal, TypeVar
+from urllib.parse import urlparse
 
 from fastmcp.exceptions import ToolError
 from pydantic import Field
@@ -52,6 +53,14 @@ Limit = Annotated[int, Field(ge=1, le=20)]
 
 GDELT_NOTE = "GDELT only covers about the last 3 months; older events need other sources."
 LOC_NOTE = "Library of Congress newspapers (Chronicling America) only cover 1770–1963."
+GOOGLE_NEWS_NOTE = (
+    "Google News links are redirect wrappers the engine can't read; find the article on the "
+    "publisher's site and use that URL."
+)
+COURTLISTENER_NOTE = (
+    "CourtListener blocks direct fetches of docket pages (HTTP 403); cite opinion text from "
+    "search snippets' URLs only if they can be read, or use EDGAR 8-Ks for bankruptcy facts."
+)
 YAHOO_NOTE = (
     "Yahoo Finance has no data for delisted companies (e.g. Circuit City, delisted 2009); "
     "use EDGAR filings for financials."
@@ -283,7 +292,9 @@ async def source_news_rss(
     when: Annotated[str | None, Field(description='Google News window, e.g. "1y"')] = None,
     limit: Limit = 10,
 ) -> Any:
-    """News articles via Google News search (secondary sources)."""
+    """News articles via Google News search (secondary sources). Result URLs are Google News
+    redirect links the engine can't read: find the article on the publisher's site (e.g. with
+    WebSearch) and pass that URL to extract_from_document."""
     rows = await _call(
         "news_rss", f"google news {query!r}", lambda: news_rss.google_news(query, limit, when)
     )
@@ -365,12 +376,19 @@ async def extract_from_document(
     Quotes that aren't literally in the document are dropped."""
     _count("extract_from_document")
     is_url = url_or_text.startswith(("http://", "https://"))
+    host = urlparse(url_or_text).netloc.lower() if is_url else ""
+    if host == "news.google.com":
+        _note(GOOGLE_NEWS_NOTE)
+        raise ToolError(GOOGLE_NEWS_NOTE)
     if is_url:
         try:
             document = await run_text(url_or_text)
         except SourceError as e:
-            _log("warn", f"extract: couldn't fetch {url_or_text}: {e}")
-            raise ToolError(f"couldn't fetch the document: {e}") from e
+            _log("warn", f"extract: couldn't fetch {url_or_text}: {str(e)[:160]}")
+            if host.endswith("courtlistener.com") and e.status == 403:
+                _note(COURTLISTENER_NOTE)
+                raise ToolError(COURTLISTENER_NOTE) from e
+            raise ToolError(f"couldn't fetch the document: {str(e)[:200]}") from e
     else:
         document = url_or_text
     session = session_or_none()
