@@ -486,6 +486,17 @@ async def save_dossier(
     if story_id is None:
         raise ToolError("story_id is required")
     last = session.second_opinions[-1] if session and session.second_opinions else None
+    must = [
+        f
+        for f in (last["flags"] if last else [])
+        if f.get("kind") == "interpretation" or f.get("severity") == "high"
+    ]
+    if len(dossier.second_opinion_resolutions) < len(must):
+        raise ToolError(
+            f"resolve every interpretation or high-severity flag first ({len(must)} flags, "
+            f"{len(dossier.second_opinion_resolutions)} resolutions): label interpretation as "
+            "such, fix, or move it to open_questions, and record it in second_opinion_resolutions"
+        )
     review = {
         "flags": last["flags"] if last else [],
         "overall": last["overall"] if last else None,
