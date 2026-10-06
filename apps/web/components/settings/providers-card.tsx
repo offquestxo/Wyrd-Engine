@@ -102,7 +102,7 @@ export function ProvidersCard() {
       <section>
         <h3 className="mb-2 text-sm font-medium">Edit providers.yaml</h3>
         <p className="mb-3 text-xs text-muted-foreground">
-          Model IDs, limits, routes, the near-limit ratio, and the Claude daily soft cap (<code className="font-mono">claude.limits.daily_soft_cap_runs</code>).
+          Model IDs, limits, routes, and the near-limit ratio. The Claude soft cap is on the Agents tab.
           Saving reloads the router.
         </p>
         <ConfigEditor name="providers" />

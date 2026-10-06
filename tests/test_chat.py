@@ -181,6 +181,9 @@ async def test_mention_fast_path_makes_plan_without_claude(svc: Any) -> None:
     assert [(s["agent"], s["params"]) for s in plan["steps"]] == [
         ("scout", {"mode": "both", "topic": "fraud", "limit": 5})
     ]
+    step = plan["steps"][0]
+    assert step["providers"][0] == "groq" and "youtube" in step["providers"]  # from providers.yaml
+    assert step["uses_claude"] is False
 
 
 @pytest.mark.parametrize(

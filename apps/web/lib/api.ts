@@ -1,6 +1,9 @@
-// Backend client. The API binds to 127.0.0.1:8000 (see Makefile).
+// Backend client. The browser calls the API through the web app's own origin: Next.js
+// forwards /api/* to the FastAPI server on 127.0.0.1:8000 (next.config.ts). That keeps one
+// port to expose later (e.g. `tailscale serve` of :3000 for phone access, SPEC §13).
+// NEXT_PUBLIC_API_URL can still point the browser straight at the API.
 
-export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000"
+export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? ""
 
 export class ApiError extends Error {
   constructor(
@@ -19,7 +22,7 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
       headers: { "Content-Type": "application/json", ...init?.headers },
     })
   } catch {
-    throw new ApiError("Can't reach the engine API on 127.0.0.1:8000. Is `make dev` running?", 0)
+    throw new ApiError("Can't reach the engine API. Is `make dev` running?", 0)
   }
   if (!res.ok) {
     let detail = res.statusText
@@ -31,6 +34,7 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
     }
     throw new ApiError(detail, res.status)
   }
+  if (res.status === 204) return undefined as T
   return (await res.json()) as T
 }
 

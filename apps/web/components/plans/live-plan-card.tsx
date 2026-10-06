@@ -58,7 +58,7 @@ export function LivePlanCard({ plan, onChange }: { plan: PlanRecord; onChange?: 
       <ol className="divide-y">
         {plan.steps.map((step) => (
           <li key={step.id} className="px-4 py-3">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="font-mono text-xs text-muted-foreground">{step.order}.</span>
               <AgentTag agent={step.agent} />
               {step.uses_claude && (
@@ -74,11 +74,22 @@ export function LivePlanCard({ plan, onChange }: { plan: PlanRecord; onChange?: 
                 </Link>
               )}
             </div>
-            {step.estimate && (step.estimate.youtube_search_calls ?? 0) > 0 && (
-              <p className="mt-2 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+            <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+              {step.providers && step.providers.length > 0 && (
+                <span title="Primary first, then fallbacks (providers.yaml)">
+                  Providers: <span className="font-mono">{step.providers.join(" → ")}</span>
+                </span>
+              )}
+              <span>{step.uses_claude ? "Uses Claude" : "No Claude usage"}</span>
+            </p>
+            {step.estimate && (step.estimate.youtube_units ?? 0) > 0 && (
+              <p className="mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground">
                 <MonitorPlayIcon className="size-3" />
-                Up to {step.estimate.youtube_search_calls} YouTube search calls ·{" "}
-                {step.estimate.youtube_units} units (of 100 searches / 10,000 units a day)
+                {(step.estimate.youtube_search_calls ?? 0) > 0
+                  ? `Up to ${step.estimate.youtube_search_calls} YouTube search calls · ${step.estimate.youtube_units} units`
+                  : `~${step.estimate.youtube_units} YouTube units`}{" "}
+                (of 100 searches / 10,000 units a day)
+                {step.estimate.note && <span className="text-muted-foreground/70">· {step.estimate.note}</span>}
               </p>
             )}
             {editing ? (
@@ -125,7 +136,7 @@ function ParamChips({ params }: { params: Params }) {
       {entries.map(([k, v]) => (
         <span key={k} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px]">
           <span className="text-muted-foreground">{k}=</span>
-          {Array.isArray(v) ? v.join(",") : String(v)}
+          {Array.isArray(v) ? v.join(",") : v !== null && typeof v === "object" ? JSON.stringify(v) : String(v)}
         </span>
       ))}
     </div>
@@ -134,15 +145,29 @@ function ParamChips({ params }: { params: Params }) {
 
 function StepEditor({ value, onChange }: { step: PlanStepRecord; value: Params; onChange: (p: Params) => void }) {
   return (
-    <div className="mt-3 grid grid-cols-2 gap-2">
+    <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
       {Object.entries(value).map(([key, current]) => (
         <label key={key} className="space-y-1">
           <span className="font-mono text-[11px] text-muted-foreground">{key}</span>
           <Input
             className="h-7 font-mono text-xs"
-            defaultValue={Array.isArray(current) ? current.join(",") : String(current ?? "")}
+            defaultValue={
+              Array.isArray(current)
+                ? current.join(",")
+                : current !== null && typeof current === "object"
+                  ? JSON.stringify(current)
+                  : String(current ?? "")
+            }
             onChange={(e) => {
               const raw = e.target.value
+              if (current !== null && typeof current === "object" && !Array.isArray(current)) {
+                try {
+                  onChange({ ...value, [key]: JSON.parse(raw) as unknown })
+                } catch {
+                  // keep the last valid JSON until the edit parses
+                }
+                return
+              }
               const parsed = Array.isArray(current)
                 ? raw.split(",").map((s) => s.trim()).filter(Boolean)
                 : typeof current === "number"

@@ -69,63 +69,6 @@ export interface Story {
 export type AgentName = "scout" | "outlier" | "researcher"
 export type RunStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled"
 
-export interface RunLog {
-  ts: string
-  level: "debug" | "info" | "warn" | "error"
-  message: string
-}
-
-export interface AgentRun {
-  id: number
-  agent: AgentName
-  params: Record<string, unknown>
-  status: RunStatus
-  started_at: string | null
-  finished_at: string | null
-  current_step?: string
-  progress?: number
-  summary?: string
-  error?: string
-  providers: string[]
-  logs: RunLog[]
-}
-
-export interface PlanStep {
-  order: number
-  agent: AgentName
-  params: Record<string, unknown>
-  providers: string[]
-  youtube_units?: number
-  uses_claude: boolean
-}
-
-export interface Plan {
-  id: number
-  chat_id: number
-  status: "pending" | "approved" | "cancelled" | "done" | "failed"
-  summary: string
-  steps: PlanStep[]
-  created_at: string
-}
-
-export type MessageRole = "user" | "assistant" | "system" | "agent"
-
-export interface ChatMessage {
-  id: number
-  role: MessageRole
-  content: string
-  created_at: string
-  plan?: Plan
-  result?: { agent: AgentName; run_id: number; headline: string; items: string[]; href: string }
-}
-
-export interface ChatThread {
-  id: number
-  title: string
-  updated_at: string
-  messages: ChatMessage[]
-}
-
 export interface Dossier {
   id: number
   story_id: number
@@ -176,18 +119,6 @@ export interface ChannelRecord {
   videos: number
 }
 
-export interface UsageMeter {
-  provider: string
-  label: string
-  unit: string
-  used: number
-  limit: number | null
-  calls: number
-  errors: number
-  fallbacks: number
-  note?: string
-}
-
 // --- real backend responses -------------------------------------------------
 export interface KeyStatus {
   env: string
@@ -220,6 +151,9 @@ export interface ProviderSummary {
 export interface AgentSettings {
   name: string
   description: string
+  hidden?: boolean
+  implemented?: boolean
+  arrives_in?: string | null
   uses_claude: boolean
   uses_youtube_quota: boolean
   available: boolean
@@ -285,6 +219,7 @@ export interface PlanStepRecord {
   uses_claude: boolean
   uses_youtube_quota: boolean
   estimate?: { youtube_search_calls?: number; youtube_units?: number; note?: string } | null
+  providers?: string[]
 }
 
 export interface PlanRecord {
@@ -323,10 +258,84 @@ export interface ProviderMeter {
   search_calls?: number
   search_limit?: number | null
   models: ModelUsage[]
+  claude?: ClaudeUsage
+}
+
+export interface ClaudeUsage {
+  chat_turns: number
+  agent_runs: number
+  duration_s: number
+  turns: number
+  soft_cap: number
+  warn: boolean
+  over: boolean
+  rate_limit: { status?: string; resetsAt?: number; rateLimitType?: string } | null
 }
 
 export interface UsageReport {
   since: string
   timezone: string
   meters: ProviderMeter[]
+}
+
+// --- Phase 5: chat --------------------------------------------------------------
+export type MessageRole = "user" | "assistant" | "system" | "agent"
+
+export interface ResultItem {
+  label: string
+  detail?: string | null
+  href: string
+  id?: number | string | null
+}
+
+export interface ResultStep {
+  order: number
+  agent: string
+  run_id: number | null
+  status: string
+  summary: string | null
+  error: string | null
+  youtube_units?: number | null
+  items: ResultItem[]
+}
+
+export interface MessageMetadata {
+  kind?: "plan" | "result" | "notice" | "error"
+  plan_id?: number
+  status?: string
+  steps?: ResultStep[]
+  streaming?: boolean
+  engine_turn?: boolean
+  tools?: string[]
+  duration_ms?: number
+  turns?: number
+  model?: string | null
+  error?: string | null
+  fast_path?: boolean
+  fallback_reason?: string
+}
+
+export interface ChatMessageRecord {
+  id: number
+  chat_id: number
+  role: MessageRole
+  content: string
+  metadata: MessageMetadata
+  created_at: string
+}
+
+export interface ChatSummary {
+  id: number
+  title: string
+  has_session: boolean
+  created_at: string
+  updated_at: string
+  busy: boolean
+  message_count?: number
+  preview?: string
+}
+
+export interface ChatDetail extends ChatSummary {
+  messages: ChatMessageRecord[]
+  plans: Record<string, PlanRecord>
 }

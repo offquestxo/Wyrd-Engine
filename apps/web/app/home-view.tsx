@@ -162,6 +162,22 @@ function MeterCard({ meter }: { meter: ProviderMeter }) {
         <p className="font-mono text-[10px] text-muted-foreground">
           {formatNumber(meter.requests)} calls · {meter.errors} err · {meter.fallbacks} fallback
         </p>
+        {meter.claude && (
+          <div className="space-y-0.5 font-mono text-[10px] text-muted-foreground">
+            <p>
+              {meter.claude.chat_turns} chat · {meter.claude.agent_runs} agent runs · {meter.claude.turns} turns ·{" "}
+              {meter.claude.duration_s}s
+            </p>
+            {(meter.claude.warn || meter.claude.over) && (
+              <p className={meter.claude.over ? "text-destructive" : "text-warning"}>
+                {meter.claude.over ? "Over the daily soft cap" : "Nearing the daily soft cap"} (Settings → Agents)
+              </p>
+            )}
+            {meter.claude.rate_limit?.status && meter.claude.rate_limit.status !== "allowed" && (
+              <p className="text-warning">Claude Code reports: {meter.claude.rate_limit.status}</p>
+            )}
+          </div>
+        )}
         {meter.search_limit ? (
           <p className="font-mono text-[10px] text-muted-foreground">
             search {meter.search_calls ?? 0} / {meter.search_limit} calls

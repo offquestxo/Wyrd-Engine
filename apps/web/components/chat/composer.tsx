@@ -1,22 +1,49 @@
 "use client"
 
-import { ArrowUpIcon } from "lucide-react"
+import { ArrowUpIcon, Loader2Icon } from "lucide-react"
 import { useMemo, useRef, useState } from "react"
+import useSWR from "swr"
 
 import { Button } from "@/components/ui/button"
+import { fetcher } from "@/lib/api"
 import { AGENT_INFO } from "@/lib/nav"
+import type { AgentSettings } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
-/** Chat input with @-autocomplete for agents. Enter sends, Shift+Enter adds a line. */
-export function Composer({ initial = "", onSend }: { initial?: string; onSend: (text: string) => void }) {
+/** Chat input with @-autocomplete for agents (descriptions from /api/agents).
+ *  Enter sends, Shift+Enter adds a line. */
+export function Composer({
+  initial = "",
+  onSend,
+  busy = false,
+  disabled = false,
+}: {
+  initial?: string
+  onSend: (text: string) => void | Promise<void>
+  busy?: boolean
+  disabled?: boolean
+}) {
+  const { data: agents } = useSWR<AgentSettings[]>("/api/agents", fetcher, { revalidateOnFocus: false })
+  const options = useMemo(
+    () =>
+      agents
+        ? agents
+            .filter((a) => a.available && !a.hidden)
+            .map((a) => ({
+              name: a.name,
+              description: a.implemented === false ? `${a.description} (${a.arrives_in ?? "coming"})` : a.description,
+            }))
+        : AGENT_INFO.map((a) => ({ name: a.name, description: a.description })),
+    [agents],
+  )
   const [text, setText] = useState(initial)
   const [active, setActive] = useState(0)
   const ref = useRef<HTMLTextAreaElement>(null)
 
   const mention = /(^|\s)@(\w*)$/.exec(text)
   const matches = useMemo(
-    () => (mention ? AGENT_INFO.filter((a) => a.name.startsWith(mention[2].toLowerCase())) : []),
-    [mention],
+    () => (mention ? options.filter((a) => a.name.startsWith(mention[2].toLowerCase())) : []),
+    [mention, options],
   )
   const open = matches.length > 0
 
@@ -27,15 +54,15 @@ export function Composer({ initial = "", onSend }: { initial?: string; onSend: (
   }
 
   const send = () => {
-    if (!text.trim()) return
-    onSend(text.trim())
+    if (!text.trim() || busy || disabled) return
+    void onSend(text.trim())
     setText("")
   }
 
   return (
     <div className="relative">
       {open && (
-        <div role="listbox" className="absolute bottom-full left-0 mb-2 w-80 overflow-hidden rounded-lg border bg-popover p-1 shadow-lg">
+        <div role="listbox" className="absolute bottom-full left-0 mb-2 w-80 max-w-full overflow-hidden rounded-lg border bg-popover p-1 shadow-lg">
           {matches.map((agent, i) => (
             <button
               key={agent.name}
@@ -78,8 +105,14 @@ export function Composer({ initial = "", onSend }: { initial?: string; onSend: (
           placeholder="Ask the orchestrator, or type @ to run an agent directly…"
           className="max-h-40 min-h-9 flex-1 resize-none bg-transparent px-2 py-1.5 text-sm outline-none placeholder:text-muted-foreground field-sizing-content"
         />
-        <Button size="icon-sm" onClick={send} disabled={!text.trim()} aria-label="Send" className="bg-brand text-brand-foreground hover:bg-brand/90">
-          <ArrowUpIcon />
+        <Button
+          size="icon-sm"
+          onClick={send}
+          disabled={!text.trim() || busy || disabled}
+          aria-label="Send"
+          className="bg-brand text-brand-foreground hover:bg-brand/90"
+        >
+          {busy ? <Loader2Icon className="animate-spin" /> : <ArrowUpIcon />}
         </Button>
       </div>
       <p className="mt-1.5 px-1 text-[11px] text-muted-foreground">
