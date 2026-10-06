@@ -65,6 +65,7 @@ class ProvidersConfig(BaseModel):
     retry: RetryConfig = Field(default_factory=RetryConfig)
     near_limit_ratio: float = 0.9
     auth_failure_cooldown_s: float = 900.0
+    headroom_tasks: list[str] = Field(default_factory=list)
     tasks: dict[str, list[RouteStep]]
 
     def model(self, provider: str, alias: str) -> ModelConfig:
@@ -119,6 +120,7 @@ class ScoringConfig(BaseModel):
     scout: dict[str, Any]
     gap_finder: dict[str, Any]
     outlier: dict[str, Any]
+    research: dict[str, Any] = Field(default_factory=dict)
     series: list[str]
 
 

@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 from sqlmodel import Session, select
 
-from apps.api.config import ProvidersConfig
+from apps.api.config import ProvidersConfig, RouteStep
 from apps.api.db.migrate import migrate_path
 from apps.api.db.models import ProviderUsage
 from apps.api.db.session import make_engine
@@ -388,3 +388,37 @@ async def test_auth_failure_skips_provider_until_cooldown(engine: Any) -> None:
     now[0] += config.auth_failure_cooldown_s
     await router.score_items(ITEMS)  # cooldown over → gemini tried again and works
     assert len(gemini.calls) == 2 and len(nvidia.calls) == 2
+
+
+async def test_headroom_route_prefers_model_with_most_daily_requests_left(engine: Any) -> None:
+    config = make_config()
+    config.providers["gemini"].models["flash"] = (
+        config.providers["gemini"]
+        .models["lite"]
+        .model_copy(
+            update={
+                "id": "gemini-flash",
+                "limits": config.providers["gemini"]
+                .models["lite"]
+                .limits.model_copy(update={"rpd": 20, "rpm": None}),
+            }
+        )
+    )
+    config.tasks["extract_from_document"] = [
+        RouteStep(provider="gemini", model="flash"),  # 20/day
+        RouteStep(provider="gemini", model="lite"),  # 1000/day
+        RouteStep(provider="nvidia", model="chat"),
+    ]
+    nv = config.providers["nvidia"].models["chat"]
+    config.providers["nvidia"].models["chat"] = nv.model_copy(
+        update={"limits": nv.limits.model_copy(update={"rpd": None})}  # no daily limit: last
+    )
+    config.headroom_tasks = ["extract_from_document"]
+    providers = {"gemini": FakeProvider("gemini", []), "nvidia": FakeProvider("nvidia", [])}
+    router = Router(config, providers, UsageLog(engine))  # type: ignore[arg-type]
+    order = lambda: [s.model for s in router._route("extract_from_document")]  # noqa: E731
+    assert order() == ["flash", "lite", "chat"]  # all fresh: config order
+    usage = UsageLog(engine)
+    for _ in range(5):  # flash: 15/20 left (75%) < lite 100%
+        usage.record(provider="gemini", model="gemini-flash", task="x", ok=True)
+    assert order() == ["lite", "flash", "chat"]

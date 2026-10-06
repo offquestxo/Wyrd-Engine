@@ -5,6 +5,7 @@ http:
   # Minimum seconds between requests per host (politeness / documented limits).
   min_interval_s:
     sec.gov: 0.15            # SEC fair access: max 10 req/s
+    www.sec.gov: 0.15
     efts.sec.gov: 0.15
     data.sec.gov: 0.15
     api.gdeltproject.org: 5.5  # GDELT asks for at most one request every 5 s
