@@ -151,8 +151,8 @@ def test_plan_run_lifecycle_over_http(client: TestClient) -> None:
     import time
 
     with client:
-        bad = client.post("/api/plans", json={"summary": "x", "steps": [{"agent": "scout"}]})
-        assert bad.status_code == 422 and "Phase 3" in bad.json()["detail"]
+        bad = client.post("/api/plans", json={"summary": "x", "steps": [{"agent": "outlier"}]})
+        assert bad.status_code == 422 and "Phase 4" in bad.json()["detail"]
 
         plan = client.post(
             "/api/plans",
@@ -187,3 +187,44 @@ def test_usage_endpoint_lists_every_provider(client: TestClient) -> None:
         meters = {m["provider"]: m for m in client.get("/api/usage").json()["meters"]}
     assert {"groq", "gemini", "nvidia", "mistral", "openrouter", "youtube", "claude"} <= set(meters)
     assert meters["youtube"]["limit"] == 10000 and meters["claude"]["unit"] == "runs"
+
+
+def test_stories_endpoints(client: TestClient) -> None:
+    from apps.api.db.session import get_engine
+    from apps.api.stories import SourceIn, StoryIn, create_story
+
+    with client:
+        story = create_story(
+            get_engine(),
+            StoryIn(
+                title="Circuit City",
+                hook="An electronics giant's last chapter",
+                series="Recent Collapses",
+                format="Long",
+                scores={
+                    "drama": 8,
+                    "twist": 9,
+                    "relatability": 9,
+                    "visual_potential": 8,
+                    "hook_number": 7,
+                    "freshness": 6,
+                },
+                sources=[SourceIn(url="https://en.wikipedia.org/wiki/Circuit_City")],
+            ),
+            added_by="test",
+        )
+        listed = client.get("/api/stories").json()
+        assert listed[0]["title"] == "Circuit City" and listed[0]["source_count"] == 1
+        assert listed[0]["total_score"] == pytest.approx(7.9, abs=0.1)
+        assert client.get("/api/stories?q=electronics").json()[0]["id"] == story.id
+        assert client.get("/api/stories?q=nonexistentword").json() == []
+        assert client.get("/api/stories?status=Published").json() == []
+        detail = client.get(f"/api/stories/{story.id}").json()
+        assert (
+            detail["sources"][0]["url"].endswith("Circuit_City")
+            and detail["dossier_versions"] == []
+        )
+        moved = client.patch(f"/api/stories/{story.id}", json={"status": "Shortlisted"}).json()
+        assert moved["status"] == "Shortlisted"
+        assert client.patch(f"/api/stories/{story.id}", json={"status": "Nope"}).status_code == 422
+        assert client.get("/api/stories/9999").status_code == 404

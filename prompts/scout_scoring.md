@@ -14,6 +14,9 @@ Also return:
 - **hook**: one punchy line (max 20 words) that would open the video. Do not invent facts that aren't in the item.
 - **series**: one of Childhood Brands, Tech Graveyard, Fraud Files, Everyday Genius, Comebacks, Recent Collapses
 - **format**: "Short" or "Long"
+- **company**: the main company or brand the story is about (null if none)
+
+{{series_hint}}
 
 Keep each item's `id` exactly as given. Return one score object per item.
 

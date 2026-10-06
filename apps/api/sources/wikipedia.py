@@ -156,6 +156,29 @@ async def category(
     return members[:limit]
 
 
+async def page_lengths(titles: list[str]) -> dict[str, int]:
+    """Article length in bytes for many titles (50 per request)."""
+    out: dict[str, int] = {}
+    for start in range(0, len(titles), 50):
+        chunk = titles[start : start + 50]
+        data = await get_json(
+            SOURCE,
+            API,
+            params={
+                "action": "query",
+                "titles": "|".join(chunk),
+                "prop": "info",
+                "redirects": 1,
+                "format": "json",
+                "formatversion": 2,
+            },
+        )
+        for page in data.get("query", {}).get("pages", []):
+            if not page.get("missing"):
+                out[page["title"]] = int(page.get("length", 0))
+    return out
+
+
 async def pageviews(title: str, days: int = 60) -> Pageviews:
     end = datetime.now(UTC).date() - timedelta(days=1)
     start = end - timedelta(days=days - 1)

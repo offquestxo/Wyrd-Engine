@@ -13,7 +13,7 @@ from fastapi.sse import EventSourceResponse, ServerSentEvent
 from pydantic import BaseModel
 from sqlmodel import Session, col, select
 
-from apps.api import sources
+from apps.api import sources, stories
 from apps.api.agents.registry import AGENTS
 from apps.api.config import load_engine, load_providers
 from apps.api.config_files import ConfigError, ConfigFile, read_config, write_config
@@ -345,6 +345,37 @@ async def cancel_run(run_id: int) -> dict[str, Any]:
     if run is None:
         raise HTTPException(404, f"no run {run_id}")
     return run.model_dump(mode="json")
+
+
+# ---------------------------------------------------------------------------- stories
+@app.get("/api/stories")
+async def list_stories_endpoint(
+    status: str | None = None,
+    series: str | None = None,
+    format: str | None = None,
+    q: str | None = None,
+    limit: int = 500,
+) -> list[dict[str, Any]]:
+    return stories.list_stories(
+        get_engine(), status=status, series=series, format=format, q=q, limit=min(limit, 1000)
+    )
+
+
+@app.get("/api/stories/{story_id}")
+async def get_story_endpoint(story_id: int) -> dict[str, Any]:
+    story = stories.get_story(get_engine(), story_id)
+    if story is None:
+        raise HTTPException(404, f"no story {story_id}")
+    return story
+
+
+@app.patch("/api/stories/{story_id}")
+async def update_story_endpoint(story_id: int, patch: stories.StoryPatch) -> dict[str, Any]:
+    story = stories.update_story(get_engine(), story_id, patch)
+    if story is None:
+        raise HTTPException(404, f"no story {story_id}")
+    bus.publish("story.changed", story_id=story_id, status=story["status"])
+    return story
 
 
 # ---------------------------------------------------------------------------- usage

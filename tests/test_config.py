@@ -43,9 +43,10 @@ def test_router_prompts_render() -> None:
         "outlier_analysis",
         "second_opinion",
     ):
-        text = prompts.render(name, output_schema=schema)
+        text = prompts.render(name, output_schema=schema, series_hint="")
         assert schema in text and "{{" not in text
     assert "{{" not in prompts.render("json_repair", output_schema=schema, error="bad")
+    assert "Fraud Files" in prompts.render("scout_series_hint", series="Fraud Files")
 
 
 def test_all_spec_prompt_files_exist() -> None:

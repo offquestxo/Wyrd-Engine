@@ -5,7 +5,10 @@ dedup:
 
 scout:
   default_limit: 25
-  score_batch_size: 10
+  per_query_limit: 15         # items kept from each feed/query before dedup
+  max_items_to_score: 80      # cap on deduplicated items sent to the scorer per run
+  max_age_days: 30            # news items older than this are dropped
+  embed_batch_size: 50
   rubric_weights:
     drama: 1.0
     twist: 1.0
@@ -16,6 +19,14 @@ scout:
 
 gap_finder:
   youtube_view_threshold: 100000     # a video above this many views counts as existing coverage
+  search_results_per_check: 10       # videos looked at per search.list call
+  coverage_saturation: 5             # this many popular videos = fully covered (low_coverage 0)
+  search_calls_reserve: 10           # leave this many of the 100/day search calls unused
+  units_reserve: 500                 # leave this many of the 10,000/day units unused
+  # article_richness normalisation (value at which each part counts as "full")
+  richness_refs_full: 100
+  richness_length_full: 80000        # bytes of wikitext
+  richness_pageviews_full: 100000    # pageviews over pageview_days
   weights:
     story_quality: 0.5
     article_richness: 0.2
