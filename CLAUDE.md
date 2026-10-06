@@ -57,13 +57,10 @@ You are building and maintaining the wyrd.exe story engine: a local app that fin
 - Phase 0 (foundation): **done**, pushed to github.com/offquestxo/Wyrd-Engine (private).
   Config, SQLite schema + FTS5, provider router (retries, fallback, JSON repair, usage
   logging, auth-failure cooldown), 12 source CLIs, FastAPI health/key-status endpoints.
-- Provider status (2026-10-05): NVIDIA ✅, YouTube ✅, CourtListener token set.
-  **Mistral + OpenRouter added** (primary for scoring/parsing/extraction/outliers is Mistral; NVIDIA
-  next; OpenRouter last for scoring/parsing). Their keys are not in `.env` yet → untested live.
-  **Groq: unavailable** (no key; sign-up blocked). **Gemini: unavailable** (`AQ.` keys rejected with
-  401, account-wide). Both stay in routes and activate automatically with working keys.
-  Gemini OAuth (`GEMINI_AUTH=oauth`, ADC) is implemented but untested — needs owner's gcloud setup
-  (README). Every route falls back to NVIDIA or Mistral. See docs/decisions.md.
+- Provider status (2026-10-05): Groq ✅ (primary for scoring/parsing), Mistral ✅ (primary for
+  extraction/outliers), NVIDIA ✅, OpenRouter ✅, YouTube ✅, CourtListener token set.
+  **Gemini: unavailable** — `AQ.` key rejected (401); OAuth mode (`GEMINI_AUTH=oauth`) is built
+  but this machine has no gcloud ADC credentials. Gemini stays in routes, skipped. See docs/decisions.md.
 - Phase 1 (UI shell): **done**, awaiting review. All pages plus Settings (real data), command palette,
   live panel over SSE, PWA. Pages other than Settings use sample data (`apps/web/lib/mock.ts`).
 - Next: Phase 2 (jobs, runs, dashboard) after "proceed".

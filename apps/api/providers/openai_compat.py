@@ -20,7 +20,8 @@ from apps.api.providers.base import (
 class OpenAICompatProvider:
     name = "openai_compat"
     supports_embeddings = False
-    send_encoding_format = True  # some APIs (Mistral) don't take encoding_format
+    send_encoding_format = True
+    auth_mode = "api_key"  # some APIs (Mistral) don't take encoding_format
 
     def __init__(
         self,

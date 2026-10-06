@@ -34,9 +34,9 @@ SCOPES = [
     "https://www.googleapis.com/auth/generative-language.retriever",
 ]
 NOT_SET_UP = (
-    "GEMINI_AUTH=oauth but no Application Default Credentials were found. Run "
-    "`gcloud auth application-default login --client-id-file=client_secret.json "
-    "--scopes=...` (see README)."
+    "GEMINI_AUTH=oauth, but no Application Default Credentials were found "
+    "(`gcloud auth application-default print-access-token` fails). Run the "
+    "`gcloud auth application-default login --client-id-file=... --scopes=...` step in the README."
 )
 
 
@@ -62,6 +62,7 @@ def _default_loader() -> tuple[Credentials, str | None]:
 
 class GeminiOAuthProvider:
     name = "gemini"
+    auth_mode = "oauth (ADC)"
 
     def __init__(
         self,
@@ -85,6 +86,10 @@ class GeminiOAuthProvider:
     @property
     def configured(self) -> bool:
         return self._creds is not None
+
+    @property
+    def unconfigured_detail(self) -> str:
+        return NOT_SET_UP
 
     async def _headers(self) -> dict[str, str]:
         if self._creds is None:

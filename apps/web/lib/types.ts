@@ -181,6 +181,7 @@ export interface ConnectionTest {
   ok: boolean
   detail: string
   latency_ms: number
+  auth?: string | null
 }
 
 export interface ProviderSummary {

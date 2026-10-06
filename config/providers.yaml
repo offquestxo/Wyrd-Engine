@@ -3,9 +3,9 @@
 # Limits are per model unless noted. Use null when a limit is unknown/not applicable.
 # Last verified: 2026-10-05.
 #
-# Availability (2026-10-05): Groq has no key (sign-up blocked) and Gemini keys are rejected
-# (AQ.-format key bug). Both stay in routes and are skipped automatically: a provider with no
-# key is skipped, and one whose key returns 401/403 is skipped for auth_failure_cooldown_s.
+# Availability (2026-10-05): Groq, NVIDIA, Mistral, OpenRouter, YouTube connect. Gemini is
+# unavailable (AQ.-format key rejected; OAuth not set up) and stays in routes, skipped: a provider
+# whose key returns 401/403 is skipped for auth_failure_cooldown_s, one with no credentials always.
 
 providers:
   groq:
@@ -141,8 +141,8 @@ auth_failure_cooldown_s: 900
 
 # Task → ordered list of provider/model aliases (first = primary, rest = fallbacks).
 tasks:
-  # Groq and Gemini lead where they were primary before; while unavailable they are
-  # skipped, so the effective order is the one after them. Reorder freely.
+  # Groq is primary for scoring/parsing. Gemini leads where it was primary before and is
+  # skipped while unavailable, so the effective order is the one after it. Reorder freely.
   score_items:
     - { provider: groq, model: fast }
     - { provider: gemini, model: gemma }

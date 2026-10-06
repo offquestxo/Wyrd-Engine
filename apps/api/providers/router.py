@@ -486,16 +486,28 @@ class Router:
         provider = self.providers.get(provider_name)
         if provider is None:
             return ConnectionTest(provider=provider_name, ok=False, detail="unknown provider")
+        auth = getattr(provider, "auth_mode", None)
         if not provider.configured:
             env = self.config.providers[provider_name].api_key_env
-            return ConnectionTest(provider=provider_name, ok=False, detail=f"{env} is not set")
+            detail = getattr(provider, "unconfigured_detail", f"{env} is not set")
+            return ConnectionTest(provider=provider_name, ok=False, detail=detail, auth=auth)
         result = await provider.test_connection()
+        result.auth = auth
         if result.ok:
             self._auth_failed_at.pop(provider_name, None)
         return result
 
 
 # ---------------------------------------------------------------------- default instance
+def gemini_uses_oauth() -> bool:
+    from apps.api.settings import get_settings
+
+    mode = get_settings().gemini_auth.strip().strip("'\"").lower()
+    if mode not in ("", "api_key", "oauth"):
+        log.warning("GEMINI_AUTH=%r is not 'api_key' or 'oauth'; using api_key", mode)
+    return mode == "oauth"
+
+
 def build_providers(config: ProvidersConfig) -> dict[str, LLMProvider]:
     from apps.api.providers.gemini import GeminiProvider
     from apps.api.providers.gemini_oauth import GeminiOAuthProvider
@@ -528,7 +540,8 @@ def build_providers(config: ProvidersConfig) -> dict[str, LLMProvider]:
                 probe_model=embed.id if embed else "",
                 probe_extra=embed.extra if embed else None,
             )
-        elif name == "gemini" and settings.gemini_auth.strip().lower() == "oauth":
+        elif name == "gemini" and gemini_uses_oauth():
+            # OAuth takes priority over GEMINI_API_KEY whenever GEMINI_AUTH=oauth.
             built[name] = GeminiOAuthProvider(quota_project=settings.google_cloud_quota_project)
         elif name == "gemini":
             built[name] = GeminiProvider(api_key=key, api_key_env=pc.api_key_env or "")
