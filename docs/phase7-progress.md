@@ -19,7 +19,8 @@ Resume note in case a session hits the usage limit.
 
 ## Checkpoints
 - [x] Phase 6 review fixes pushed (eddd0e6)
-- [ ] notion_sync.py + config + endpoints + tests (respx)
-- [ ] Settings UI (Notion card)
-- [ ] DB setup via connector; owner adds NOTION_TOKEN + shares DB with the integration
+- [x] notion_sync.py + config + endpoints + tests (fake API via httpx.MockTransport) (261c9ee)
+- [x] Settings UI (Notion card) (ecb11eb)
+- [x] DB created via connector: "wyrd.exe Stories" (18b09686f09640aeb42a07a7aed75d26); NOTION_DATABASE_ID set in .env
+- [ ] Owner: add NOTION_TOKEN, add the integration to the database (••• → Connections), Reload .env
 - [ ] Live: push stories, change Status in Notion, sync back

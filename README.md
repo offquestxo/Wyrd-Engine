@@ -66,6 +66,14 @@ Open http://127.0.0.1:3000 after `make dev`. In Chrome or Edge, use the install 
 
 The orchestrator runs with only the engine's own tools (no shell, no file access). Its sessions are stored under `~/.local/share/wyrd/orchestrator` (`config/engine.yaml` → `orchestrator`). The browser reaches the API through the web app's own `/api` path, which Next.js forwards to `127.0.0.1:8000`.
 
+**Notion (optional)** mirrors the Stories table to a Notion database: stories push to Notion, and only Status and Notes come back (the newest change wins), so you can move cards from your phone. Setup:
+1. Create an internal integration at [notion.so/profile/integrations](https://www.notion.so/profile/integrations) and put its secret in `NOTION_TOKEN`.
+2. Use a database with these exact properties: Title (title), Status/Series/Format (select), Hook/Scores/Sources/Notes (text), Gap Score/Engine ID (number), Updated (date). The "wyrd.exe Stories" database was created this way.
+3. In the database's ••• menu → **Connections**, add your integration, and put the database ID in `NOTION_DATABASE_ID`.
+4. Settings → System → **Reload .env**, then Settings → Notion → **Sync now**. Turn on auto-sync to push changes a few seconds after they happen and pull every 10 minutes.
+
+Without the token, sync is off and nothing else changes.
+
 **Research** shows @researcher dossiers. Start one with **Research this** in a story's drawer or `@researcher <story>` in Chat; the plan card shows the depth, the sources it will use and its Claude turn budget (quick 20, standard 40, deep 70; `config/scoring.yaml` → `research`). Every Timeline item, Key Number and the Twist is checked on save: its excerpt must appear in the cited source, or it moves to "Open Questions / Unverified". Dossiers export to `research/<story>/dossier.md` and `sources.json`. **Copy for Script Room** copies the markdown; **Open exported file** shows it in Finder.
 
 ## Gemini via OAuth (recommended)
