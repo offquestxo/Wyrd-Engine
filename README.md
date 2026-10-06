@@ -66,7 +66,7 @@ Open http://127.0.0.1:3000 after `make dev`. In Chrome or Edge, use the install 
 
 The orchestrator runs with only the engine's own tools (no shell, no file access). Its sessions are stored under `~/.local/share/wyrd/orchestrator` (`config/engine.yaml` → `orchestrator`). The browser reaches the API through the web app's own `/api` path, which Next.js forwards to `127.0.0.1:8000`.
 
-To preview a page's loading, empty, or error state, add `?state=loading`, `?state=empty`, or `?state=error` to its URL (sample-data pages only).
+**Research** shows @researcher dossiers. Start one with **Research this** in a story's drawer or `@researcher <story>` in Chat; the plan card shows the depth, the sources it will use and its Claude turn budget (quick 20, standard 40, deep 70; `config/scoring.yaml` → `research`). Every Timeline item, Key Number and the Twist is checked on save: its excerpt must appear in the cited source, or it moves to "Open Questions / Unverified". Dossiers export to `research/<story>/dossier.md` and `sources.json`. **Copy for Script Room** copies the markdown; **Open exported file** shows it in Finder.
 
 ## Gemini via OAuth (recommended)
 
