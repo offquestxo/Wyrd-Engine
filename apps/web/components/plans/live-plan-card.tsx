@@ -82,6 +82,17 @@ export function LivePlanCard({ plan, onChange }: { plan: PlanRecord; onChange?: 
               )}
               <span>{step.uses_claude ? "Uses Claude" : "No Claude usage"}</span>
             </p>
+            {step.estimate?.claude_turns != null && (
+              <p className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+                <SparklesIcon className="size-3" />
+                Up to {step.estimate.claude_turns} Claude turns
+                {step.estimate.sources && step.estimate.sources.length > 0 && (
+                  <span>
+                    · sources: <span className="font-mono">{step.estimate.sources.join(", ")}</span>
+                  </span>
+                )}
+              </p>
+            )}
             {step.estimate && (step.estimate.youtube_units ?? 0) > 0 && (
               <p className="mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground">
                 <MonitorPlayIcon className="size-3" />

@@ -69,19 +69,6 @@ export interface Story {
 export type AgentName = "scout" | "outlier" | "researcher"
 export type RunStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled"
 
-export interface Dossier {
-  id: number
-  story_id: number
-  story_title: string
-  slug: string
-  version: number
-  versions: number[]
-  markdown: string
-  sources: { n: number; url: string; title: string; primary: boolean }[]
-  flags: number
-  created_at: string
-}
-
 export interface OutlierAnalysisRecord {
   topic: string
   company_type: string
@@ -218,7 +205,13 @@ export interface PlanStepRecord {
   run_id: number | null
   uses_claude: boolean
   uses_youtube_quota: boolean
-  estimate?: { youtube_search_calls?: number; youtube_units?: number; note?: string } | null
+  estimate?: {
+    youtube_search_calls?: number
+    youtube_units?: number
+    claude_turns?: number
+    sources?: string[]
+    note?: string
+  } | null
   providers?: string[]
 }
 
@@ -338,4 +331,43 @@ export interface ChatSummary {
 export interface ChatDetail extends ChatSummary {
   messages: ChatMessageRecord[]
   plans: Record<string, PlanRecord>
+}
+
+// --- Phase 6: dossiers ----------------------------------------------------------
+export interface DossierSource {
+  n: number
+  url: string
+  title: string
+  kind: string | null
+  source_type: "primary" | "secondary"
+  claims_checked: number
+  claims_verified: number
+}
+
+export interface DossierSummary {
+  id: number
+  story_id: number
+  story_title: string
+  slug: string | null
+  status: string | null
+  version: number
+  versions: number[]
+  created_at: string
+  run_id: number | null
+  excerpt_check: { passed: number; failed: number }
+  flags: number
+  source_count: number
+  primary_count: number
+}
+
+export interface DossierDetail extends DossierSummary {
+  markdown: string
+  sources: DossierSource[]
+  export_path: string | null
+  second_opinion: {
+    flags: { claim: string; issue: string; severity: "low" | "medium" | "high"; suggestion: string }[]
+    overall: string | null
+    resolutions: { claim: string; action: string; note: string }[]
+  } | null
+  checks: Record<string, unknown> | null
 }

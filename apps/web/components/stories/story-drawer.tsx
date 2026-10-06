@@ -2,13 +2,13 @@
 
 import { ArrowRightIcon, BookOpenTextIcon, ExternalLinkIcon, StarIcon } from "lucide-react"
 import Link from "next/link"
-import { toast } from "sonner"
 
 import { ScoreBar, StoryStatusBadge, UnverifiedBadge } from "@/components/common/badges"
 import { ErrorState, LoadingState } from "@/components/common/states"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { useProposePlan } from "@/components/plans/propose-provider"
 import { useStory } from "@/hooks/use-live"
 import type { Story, StoryStatus } from "@/lib/types"
 
@@ -31,6 +31,7 @@ export function StoryDrawer({
   onMove: (story: Story, status: StoryStatus) => void
 }) {
   const { data: story, error, isLoading, mutate } = useStory(storyId)
+  const propose = useProposePlan()
 
   return (
     <Sheet open={storyId !== null} onOpenChange={onOpenChange}>
@@ -143,7 +144,9 @@ export function StoryDrawer({
                 <Button
                   size="sm"
                   className="bg-brand text-brand-foreground hover:bg-brand/90"
-                  onClick={() => toast.info("@researcher arrives in Phase 6.")}
+                  onClick={() =>
+                    void propose("researcher", { story_id: story.id, depth: "standard" }, `Research “${story.title}” (standard depth)`)
+                  }
                 >
                   <BookOpenTextIcon /> Research this
                 </Button>
