@@ -109,3 +109,25 @@ Choices not covered by SPEC.md, newest last. Each keeps v1 simple and v2 easy.
 **OAuth result: not working on this machine, so Gemini stays skipped.** `gcloud` is installed, but `gcloud auth list` shows no credentialed accounts and `gcloud auth application-default print-access-token` fails ("default credentials were not found"), so there's no token for the engine or for curl. The owner's curl results came through as unfilled placeholders, so no successful (HTTP 200) call is on record. Per the owner's instruction, no more time goes into it: Gemini stays in the routes and is skipped. To retry: finish the README steps (the `application-default login` with the Desktop client JSON), confirm `print-access-token` works, set `GEMINI_AUTH=oauth`, and click **Reload .env** then **Test connection**.
 
 **Groq is primary for `score_items` and `parse_mention`** (it was already first in those routes and now has a working key). Verified live: both tasks were served by `openai/gpt-oss-20b` (846 and 485 tokens in, under 1 s each) with no fallbacks.
+
+## Phase 2: jobs, runs, dashboard (2026-10-05)
+
+**Runs only start from approved plans** (hard rule 3). There's no "start a run" endpoint. `POST /api/plans` creates a pending plan, and `POST /api/plans/{id}/approve` (optionally with per-step param edits) enqueues step 1. If every step's agent has auto-approve on, the plan is approved on creation. Steps run one at a time: each starts when the previous one succeeds. A failed or cancelled step marks the plan failed or cancelled and skips the rest. Phase 5's plan cards and orchestrator reuse this service.
+
+**Job runner** (`apps/api/jobs.py`): runs live in `agent_runs`. A loop in the FastAPI lifespan claims queued runs in FIFO order, up to `max_concurrent_runs` (config/engine.yaml, default 2), and runs each agent's `async run(ctx)` as an asyncio task. It's woken on enqueue and otherwise polls. Cancelling a running run cancels its task; cancelling a queued one just marks it. On startup, runs still marked `running` are marked failed ("interrupted"), because a run can't resume mid-way. Agent exceptions fail the run and never crash the runner.
+
+**Logs and progress:** `ctx.log()` writes `run_logs` and publishes `run.log` over SSE. `ctx.step(name, progress)` updates `agent_runs.current_step/progress` (migration 0003) and publishes `run.status`. Router retries, fallbacks and failures are written into the current run's log through a ContextVar (`apps/api/runctx.py`), so provider problems show up in the run itself without the router importing the job system.
+
+**Agent registry** gained `runner` ("module:function"), a params model per agent (`agents/params.py`, the SPEC §6 parameter types), `arrives_in`, and `hidden`. Plans reject agents that aren't built yet, with a message naming the phase.
+
+**`@demo` test agent** (hidden from @-autocomplete): simulated steps, with optional `fail_at`. Home's **Test run** button proposes a demo plan, so the pipeline can be tried end to end without spending any provider quota.
+
+**Quota meters** (`GET /api/usage`) come from `provider_usage` and `agent_runs`:
+- "Today" starts at midnight in `engine.yaml` `usage.day_reset_timezone` (America/Los_Angeles, where Google resets).
+- Each provider card shows the model and limit closest to its cap, whether daily or per minute, plus calls, errors and fallbacks. Fallbacks come from a new `provider_usage.fallback` flag, set when a call succeeds on a non-primary provider.
+- YouTube calls now log their units, with search calls counted separately against the 100/day cap.
+- Claude counts today's runs of Claude-using agents against the soft cap.
+
+**Timestamps** use a `UTCDateTime` column type. SQLite drops timezones, so values used to come back naive, and browsers read them as local time.
+
+**Frontend:** Home, run detail and the live panel use real data. SWR refetches (throttled) on `run.*` and `plan.*` SSE events, and the run page appends `run.log` lines without refetching. Cancel is available on the run page and on each active run on Home. Chat, Stories, Research and Outliers still use sample data until their phases.
