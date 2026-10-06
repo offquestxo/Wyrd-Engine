@@ -18,6 +18,7 @@ const TABS = [
   { id: "sources", label: "Scout sources" },
   { id: "channels", label: "Channels" },
   { id: "scoring", label: "Scoring" },
+  { id: "engine", label: "Engine" },
   { id: "notion", label: "Notion" },
   { id: "system", label: "System" },
 ] as const
@@ -45,6 +46,9 @@ export function SettingsView() {
         </TabsContent>
         <TabsContent value="scoring">
           <ConfigEditor name="scoring" hint="Dedup threshold, rubric weights, gap and outlier thresholds" />
+        </TabsContent>
+        <TabsContent value="engine">
+          <ConfigEditor name="engine" hint="Concurrent runs, queue polling, quota day reset timezone" />
         </TabsContent>
         <TabsContent value="notion"><NotionCard /></TabsContent>
         <TabsContent value="system"><SystemCard /></TabsContent>

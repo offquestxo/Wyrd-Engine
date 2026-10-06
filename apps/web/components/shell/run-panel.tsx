@@ -8,16 +8,17 @@ import { AgentTag, RunStatusBadge } from "@/components/common/badges"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useEvents } from "@/hooks/use-events"
-import { useMounted } from "@/hooks/use-local-state"
+import { useRuns } from "@/hooks/use-live"
+import { useNow } from "@/hooks/use-now"
 import { clock, duration } from "@/lib/format"
-import { MOCK_RUNS } from "@/lib/mock"
 import { cn } from "@/lib/utils"
 
-/** Collapsible right panel: active runs (sample until Phase 2) + the live SSE event feed. */
+/** Collapsible right panel: active runs + the live SSE event feed (run logs, system events). */
 export function RunPanel({ onClose }: { onClose: () => void }) {
   const { events, status, clear } = useEvents()
-  // Sample runs use relative times, so render them only on the client (no hydration mismatch).
-  const runs = useMounted() ? MOCK_RUNS.filter((r) => r.status === "running") : []
+  const { data } = useRuns("status=running,queued&limit=10")
+  const runs = data ?? []
+  const now = useNow()
   const bottomRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: "end" })
@@ -34,7 +35,7 @@ export function RunPanel({ onClose }: { onClose: () => void }) {
 
       <div className="border-b p-3">
         <p className="mb-2 px-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
-          Active runs <span className="normal-case text-warning/80">· sample</span>
+          Active runs
         </p>
         {runs.length === 0 ? (
           <p className="px-1 text-xs text-muted-foreground">No agents running.</p>
@@ -51,10 +52,10 @@ export function RunPanel({ onClose }: { onClose: () => void }) {
               </div>
               <p className="mt-1.5 truncate text-xs text-foreground/80">{run.current_step}</p>
               <div className="mt-2 h-1 overflow-hidden rounded-full bg-muted">
-                <div className="h-full bg-brand" style={{ width: `${(run.progress ?? 0) * 100}%` }} />
+                <div className="h-full bg-brand transition-all" style={{ width: `${(run.progress ?? 0) * 100}%` }} />
               </div>
               <p className="mt-1.5 font-mono text-[10px] text-muted-foreground">
-                run #{run.id} · {run.started_at ? duration(run.started_at) : "queued"}
+                run #{run.id} · {run.started_at ? duration(run.started_at, null, now) : "queued"}
               </p>
             </Link>
           ))
@@ -97,7 +98,9 @@ export function RunPanel({ onClose }: { onClose: () => void }) {
 }
 
 function describe(data: Record<string, unknown>): string {
-  if (typeof data.message === "string") return data.message
+  const prefix = typeof data.run_id === "number" ? `#${data.run_id} ` : ""
+  if (typeof data.message === "string") return prefix + data.message
+  if (typeof data.status === "string" && prefix) return `${prefix}${data.status}${data.current_step ? ` · ${data.current_step}` : ""}`
   return Object.entries(data)
     .map(([k, v]) => `${k}=${typeof v === "string" ? v : JSON.stringify(v)}`)
     .join(" ")
