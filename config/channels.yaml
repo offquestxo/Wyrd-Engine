@@ -1,5 +1,5 @@
 # Competitor channels for @outlier (SPEC §6.2). Handles are resolved to IDs and cached in the DB.
 channels:
-  - { handle: "@companyman", name: "Company Man" }
+  - { handle: "@companyman114", name: "Company Man" }   # verified 2026-10-05: 1.8M subs
   - { handle: "@ModernMBA", name: "Modern MBA" }
   - { handle: "@MagnatesMedia", name: "Magnates Media" }

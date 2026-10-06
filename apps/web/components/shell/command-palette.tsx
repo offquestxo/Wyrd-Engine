@@ -65,7 +65,9 @@ export function CommandPalette({
                 run(() =>
                   agent.name === "scout"
                     ? void propose("scout", { mode: "both", limit: 25 }, "Find up to 25 story leads (news + evergreen)")
-                    : router.push(`/chat?compose=${encodeURIComponent(`@${agent.name} `)}`),
+                    : agent.name === "outlier"
+                      ? void propose("outlier", {}, "Scan all competitor channels for outliers")
+                      : router.push(`/chat?compose=${encodeURIComponent(`@${agent.name} `)}`),
                 )
               }
             >

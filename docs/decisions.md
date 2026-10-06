@@ -220,3 +220,15 @@ The owner needs to activate the free Experiment plan (or check limits) at `admin
 - **Phase 6 (@researcher):** besides the markdown, store Key Numbers, Timeline, quotes and locations as **structured JSON** in `dossiers.sources_json` / a new field, each with source URL and excerpt. @graphics then renders counters, charts, timelines, quote cards and map pins straight from verified data. Define the `[GRAPHIC: type | value | source#n]` cue syntax in the dossier export so Script Room scripts are parseable later.
 - **Stories:** add `video_url` / `published_at` (set when status → Published) so Phase 10 can join analytics to stories and their scores. Mirror them in Notion in Phase 7.
 - **Google OAuth:** Gemini uses ADC with fixed scopes. Phase 10's YouTube Analytics access should use **its own stored OAuth token** (read-only YouTube scopes, possibly a different Google account) rather than widening the ADC login, so a weekly Gemini re-login never breaks analytics and vice versa.
+
+## Phase 4: @outlier (2026-10-05)
+
+**Shorts rule** (support.google.com/youtube/answer/15424877): a video is a Short if it's square or vertical and ≤ 180 s (≤ 60 s for uploads before 2024-10-15). Aspect ratio comes from `videos.list` `player.embedWidth/embedHeight` (fitted into a 1000×1000 box), at no extra quota cost; verified live (long 1000×563, Shorts 563×1000).
+
+**Medians** are computed per channel and per format, only from videos ≥ `min_age_days` (3) old and only when there are ≥ 5 of them. Newer videos aren't flagged or listed. Outlier score = views ÷ median.
+
+**Units:** per channel, 1 lookup (only if the channel ID isn't cached) + ceil(n/50) uploads + ceil(n/50) stats. `estimate()` uses the same formula, and the run logs estimate vs. actual. Live: 9/9 units (first scan), then 7/7 (two channels cached).
+
+**Seed handle fix:** `@companyman` is a different, tiny channel. Company Man is `@companyman114` (1.8M subscribers). Channel lookups now log subscriber and video counts so a wrong handle is obvious.
+
+**Create story from outlier:** makes an Inbox story with `outlier_ref`, the analysis angle as an (unverified) hook, and a YouTube source. Calling it twice for the same video doesn't create a duplicate.
