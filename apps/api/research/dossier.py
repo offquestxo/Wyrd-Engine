@@ -110,6 +110,159 @@ class DossierIn(BaseModel):
         return sources
 
 
+# ---------------------------------------------------------------------------- spelled numbers
+_UNITS = {
+    w: i
+    for i, w in enumerate(
+        [
+            "zero",
+            "one",
+            "two",
+            "three",
+            "four",
+            "five",
+            "six",
+            "seven",
+            "eight",
+            "nine",
+            "ten",
+            "eleven",
+            "twelve",
+            "thirteen",
+            "fourteen",
+            "fifteen",
+            "sixteen",
+            "seventeen",
+            "eighteen",
+            "nineteen",
+        ]
+    )
+}
+_TENS = {
+    w: 10 * i
+    for i, w in enumerate(
+        ["_", "_", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"]
+    )
+    if w != "_"
+}
+_WORD = "|".join([*_UNITS, *_TENS, "hundred", "thousand"])
+_WORD_RUN = re.compile(rf"\b(?:{_WORD})(?:(?:[\s-]+|\s+and\s+)(?:{_WORD}))*\b", re.IGNORECASE)
+
+
+def _words_value(words: str) -> int | None:
+    total = current = 0
+    for w in re.split(r"[\s-]+", words.lower()):
+        if w == "and":
+            continue
+        if w in _UNITS:
+            current += _UNITS[w]
+        elif w in _TENS:
+            current += _TENS[w]
+        elif w == "hundred":
+            current = max(current, 1) * 100
+        elif w == "thousand":
+            total += max(current, 1) * 1000
+            current = 0
+        else:
+            return None
+    return total + current
+
+
+def words_to_digits(text: str) -> str:
+    """ "eighteen months" → "18 months", "twenty-three" → "23" (for checking, not display)."""
+
+    def repl(m: re.Match[str]) -> str:
+        value = _words_value(m.group(0))
+        return str(value) if value is not None else m.group(0)
+
+    return _WORD_RUN.sub(repl, text)
+
+
+# ---------------------------------------------------------------------------- durations
+DURATION = re.compile(
+    r"\b(?:(about|around|roughly|nearly|almost|some|over|more than|less than|under|just)\s+)?"
+    r"(\d+)[\s-](day|week|month|year)s?\b(?:[\s-](?:later|after|before|earlier|old|on))?",
+    re.IGNORECASE,
+)
+_MONTHS = {
+    m: i
+    for i, m in enumerate(
+        ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"],
+        start=1,
+    )
+}
+
+
+class TimelineDate(BaseModel):
+    year: int
+    month: int | None = None
+    day: int | None = None
+
+    def months(self) -> float:
+        return self.year * 12 + (self.month or 1) - 1 + ((self.day or 1) - 1) / 30.44
+
+
+def parse_date(text: str) -> TimelineDate | None:
+    """Timeline dates: 2008-11-10, 2008-11, 2008, Nov 2008, November 10, 2008, 10 Nov 2008."""
+    t = text.strip()
+    if m := re.fullmatch(r"(\d{4})(?:-(\d{1,2}))?(?:-(\d{1,2}))?", t):
+        y, mo, d = m.groups()
+        return TimelineDate(year=int(y), month=int(mo) if mo else None, day=int(d) if d else None)
+    if m := re.fullmatch(r"([A-Za-z]{3})[a-z]*\.?\s+(?:(\d{1,2}),?\s+)?(\d{4})", t):
+        mon, d, y = m.groups()
+        if mon.lower() in _MONTHS:
+            return TimelineDate(year=int(y), month=_MONTHS[mon.lower()], day=int(d) if d else None)
+    if m := re.fullmatch(r"(\d{1,2})\s+([A-Za-z]{3})[a-z]*\.?\s+(\d{4})", t):
+        d, mon, y = m.groups()
+        if mon.lower() in _MONTHS:
+            return TimelineDate(year=int(y), month=_MONTHS[mon.lower()], day=int(d))
+    return None
+
+
+def durations(text: str) -> list[tuple[str, int, str, bool]]:
+    """(phrase, N, unit, approximate?) for each "N months later"-style span."""
+    return [
+        (m.group(0).strip(), int(m.group(2)), m.group(3).lower(), bool(m.group(1)))
+        for m in DURATION.finditer(text)
+    ]
+
+
+def _gap(a: TimelineDate, b: TimelineDate, unit: str) -> float | None:
+    if unit == "year" and (a.month is None or b.month is None):
+        return float(abs(b.year - a.year))
+    if a.month is None or b.month is None:
+        return None
+    if unit in ("day", "week") and (a.day is None or b.day is None):
+        return None
+    months = abs(b.months() - a.months())
+    return {
+        "year": months / 12,
+        "month": months,
+        "week": months * 30.44 / 7,
+        "day": months * 30.44,
+    }[unit]
+
+
+def duration_matches(
+    n: int, unit: str, approx: bool, dates: list[TimelineDate]
+) -> tuple[bool, str | None]:
+    """Does some pair of Timeline dates lie n units apart? Exact wording needs the rounded gap
+    to equal n; "about n" allows ±1."""
+    gaps = [
+        g
+        for i, a in enumerate(dates)
+        for b in dates[i + 1 :]
+        if (g := _gap(a, b, unit)) is not None and g > 0
+    ]
+    if not gaps:
+        return False, None
+    tolerance = 1 if approx else 0
+    if any(abs(round(g) - n) <= tolerance for g in gaps):
+        return True, None
+    closest = min(gaps, key=lambda g: abs(g - n))
+    return False, f"about {closest:.1f} {unit}s"
+
+
 # ---------------------------------------------------------------------------- checks
 TextLookup = Callable[[str], Awaitable[str]]
 
@@ -336,8 +489,30 @@ async def check_rows(
         "Hook Ideas": " ".join(out.hook_ideas),
         "Angles": f"{out.best_short_angle} {out.best_long_angle}",
     }
+    dates = [d for d in (parse_date(t.date) for t in out.timeline) if d is not None]
     seen: set[str] = set()
-    for section, text in prose.items():
+    for section, raw in prose.items():
+        text = words_to_digits(raw)
+        # "N months later" spans must match the gap between two dated Timeline items.
+        for phrase, n, unit, approx in durations(text):
+            if phrase in seen:
+                continue
+            seen.add(phrase)
+            ok, closest = duration_matches(n, unit, approx, dates)
+            if ok:
+                continue
+            hint = f"; closest Timeline gap is {closest}" if closest else ""
+            checks.append(
+                RowCheck(
+                    section="prose_numbers",
+                    claim=f"{section}: “{phrase}”",
+                    source=None,
+                    ok=False,
+                    reason=f"no two dated Timeline items are {n} {unit}s apart{hint}",
+                )
+            )
+            moved.append(f"{section} says “{phrase}”, which doesn't match the Timeline dates{hint}")
+        text = DURATION.sub(" ", text)
         for written, value, tolerance in prose_numbers(text):
             if written in seen or number_in_text(value, tolerance, source_numbers):
                 continue
