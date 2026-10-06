@@ -316,6 +316,53 @@ async def test_support_check_failure_keeps_rows_and_says_so(engine: Any, tmp_pat
     assert result["excerpt_check"]["support_check"].startswith("unavailable")
 
 
+def test_spelled_numbers_and_dates() -> None:
+    assert dmod.words_to_digits("eighteen months, twenty-three stores, two hundred") == (
+        "18 months, 23 stores, 200"
+    )
+    assert dmod.parse_date("Nov 10, 2008") == dmod.TimelineDate(year=2008, month=11, day=10)
+    assert dmod.parse_date("2008-11") == dmod.TimelineDate(year=2008, month=11)
+    assert dmod.parse_date("circa 2008") is None
+    dates = [dmod.parse_date(x) for x in ("2007-03-28", "2008-11-10", "1949", "2009")]
+    known = [d for d in dates if d]
+    assert dmod.duration_matches(18, "month", False, known) == (False, "about 19.4 months")
+    assert dmod.duration_matches(19, "month", True, known)[0]  # "about 19 months"
+    assert dmod.duration_matches(60, "year", False, known)[0]  # 1949 → 2009
+
+
+async def test_prose_durations_must_match_timeline(engine: Any, tmp_path: Path) -> None:
+    timeline = [
+        {
+            "date": "2007-03-28",
+            "event": "Layoffs",
+            "source": 2,
+            "excerpt": "laid off about 3,400 of its highest-paid store employees",
+        },
+        {
+            "date": "2008-11-10",
+            "event": "Files for Chapter 11",
+            "source": 2,
+            "excerpt": "On November 10, 2008, Circuit City filed for Chapter 11",
+        },
+    ]
+    d = make_dossier(
+        timeline=timeline,
+        hook_ideas=[
+            "Bankrupt eighteen months later",
+            "Bankrupt about 19 months later",
+            "h3",
+            "h4",
+            "h5",
+        ],
+    )
+    result = await dmod.save_dossier(engine, 1, d, lookup, research_dir=tmp_path)
+    assert result["excerpt_check"]["prose_numbers_unverified"] == 1
+    md = (tmp_path / "circuit-city" / "dossier.md").read_text()
+    unverified = md.split("## Open Questions / Unverified")[1]
+    assert "Hook Ideas says “18 months later”" in unverified and "19.4 months" in unverified
+    assert "about 19 months" not in unverified  # matches the Timeline gap
+
+
 def test_prose_number_parsing() -> None:
     found = {
         w: (v, t) for w, v, t in dmod.prose_numbers("$12.43 billion, 654 stores, in 2008, 3 CEOs")
