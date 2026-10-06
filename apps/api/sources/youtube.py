@@ -56,6 +56,17 @@ class VideoStats(BaseModel):
     likes: int | None
     comments: int | None
     url: str
+    thumbnail_url: str | None = None
+    # Player size fitted into a 1000x1000 box: reflects the video's aspect ratio
+    # (width < height → vertical). Used for the Shorts rule; costs no extra quota.
+    embed_width: int | None = None
+    embed_height: int | None = None
+
+    @property
+    def vertical(self) -> bool | None:
+        if not self.embed_width or not self.embed_height:
+            return None
+        return self.embed_height >= self.embed_width
 
 
 class VideoStatsList(BaseModel):
@@ -175,11 +186,22 @@ async def videos(video_ids: list[str]) -> VideoStatsList:
         batch = video_ids[start : start + 50]
         data = await _get(
             "videos",
-            {"part": "snippet,contentDetails,statistics", "id": ",".join(batch), "maxResults": 50},
+            {
+                "part": "snippet,contentDetails,statistics,player",
+                "id": ",".join(batch),
+                "maxResults": 50,
+                "maxWidth": 1000,
+                "maxHeight": 1000,
+            },
         )
         units += 1
         for item in data.get("items", []):
             stats, snippet = item.get("statistics") or {}, item["snippet"]
+            player = item.get("player") or {}
+            thumbs = snippet.get("thumbnails") or {}
+            thumb = (thumbs.get("high") or thumbs.get("medium") or thumbs.get("default") or {}).get(
+                "url"
+            )
             out.append(
                 VideoStats(
                     video_id=item["id"],
@@ -192,6 +214,9 @@ async def videos(video_ids: list[str]) -> VideoStatsList:
                     likes=_int(stats.get("likeCount")),
                     comments=_int(stats.get("commentCount")),
                     url=f"https://www.youtube.com/watch?v={item['id']}",
+                    thumbnail_url=thumb,
+                    embed_width=_int(player.get("embedWidth")),
+                    embed_height=_int(player.get("embedHeight")),
                 )
             )
     return VideoStatsList(videos=out, units_used=units)

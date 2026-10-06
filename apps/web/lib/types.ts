@@ -139,23 +139,41 @@ export interface Dossier {
   created_at: string
 }
 
+export interface OutlierAnalysisRecord {
+  topic: string
+  company_type: string
+  hook_pattern: string
+  why_it_worked: string
+  wyrd_angle: string
+}
+
+/** A scanned competitor video from /api/outliers. */
 export interface OutlierVideo {
   id: number
   video_id: string
-  channel: string
+  channel_id: number
+  channel_name: string | null
+  channel_handle: string | null
   title: string
+  url: string
+  thumbnail_url: string | null
   is_short: boolean
-  views: number
-  channel_median: number
-  outlier_score: number
-  published_at: string
-  analysis: {
-    topic: string
-    company_type: string
-    hook_pattern: string
-    why_it_worked: string
-    wyrd_angle: string
-  }
+  duration_s: number | null
+  views: number | null
+  channel_median: number | null
+  outlier_score: number | null
+  published_at: string | null
+  analysis: OutlierAnalysisRecord | null
+  story_id: number | null
+}
+
+export interface ChannelRecord {
+  id: number
+  handle: string
+  channel_id: string | null
+  name: string | null
+  last_scanned_at: string | null
+  videos: number
 }
 
 export interface UsageMeter {

@@ -118,7 +118,7 @@ class ScoringConfig(BaseModel):
     dedup: dict[str, float]
     scout: dict[str, Any]
     gap_finder: dict[str, Any]
-    outlier: dict[str, float | int]
+    outlier: dict[str, Any]
     series: list[str]
 
 

@@ -72,4 +72,8 @@ You are building and maintaining the wyrd.exe story engine: a local app that fin
   (`agents/dedup.py`), stories repository + API (`stories.py`), real Stories page (table/board/drawer),
   Run @scout form → plan card with YouTube estimate. Verified live (news: 10 stories; gap finder:
   20 search calls / 40 units). Mistral account has 0 req/min quota → blocked until the owner fixes it.
-- Next: Phase 4 (@outlier) after "proceed".
+- Parallel scoring across providers (75 items in 47 s), pre-filter, unverified-lead badges, v2 roadmap
+  in SPEC §13 — done.
+- Phase 4 (@outlier): **done**, awaiting review. 3 seed channels scanned live (12 outliers, all analysed;
+  9 + 7 units, matching estimates). Company Man handle corrected to @companyman114.
+- Next: Phase 5 (orchestrator + chat) after "proceed".

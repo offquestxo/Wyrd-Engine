@@ -12,7 +12,12 @@ from apps.api.db.session import make_engine
 
 def test_migrations_are_idempotent(tmp_path: Path) -> None:
     db = tmp_path / "t.db"
-    assert migrate_path(db) == ["0001_initial.sql", "0002_fts.sql", "0003_runs_progress.sql"]
+    assert migrate_path(db) == [
+        "0001_initial.sql",
+        "0002_fts.sql",
+        "0003_runs_progress.sql",
+        "0004_outliers.sql",
+    ]
     assert migrate_path(db) == []
 
 

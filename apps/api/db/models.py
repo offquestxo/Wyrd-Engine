@@ -120,6 +120,8 @@ class Channel(SQLModel, table=True):
     name: str | None = None
     uploads_playlist_id: str | None = None
     last_scanned_at: datetime | None = Field(default=None, sa_type=UTCDateTime)
+    is_own: bool = False
+    subscribers: int | None = None
 
 
 class Video(SQLModel, table=True):
@@ -136,6 +138,11 @@ class Video(SQLModel, table=True):
     comments: int | None = None
     outlier_score: float | None = None
     analysis: dict[str, Any] | None = Field(default=None, sa_type=JSON)
+    thumbnail_url: str | None = None
+    vertical: bool | None = None
+    channel_median: float | None = None
+    scanned_at: datetime | None = Field(default=None, sa_type=UTCDateTime)
+    last_run_id: int | None = Field(default=None, foreign_key="agent_runs.id")
 
 
 class Chat(SQLModel, table=True):

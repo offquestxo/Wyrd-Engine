@@ -7,7 +7,7 @@ import useSWR from "swr"
 
 import { useEngineEvent } from "@/hooks/use-events"
 import { fetcher } from "@/lib/api"
-import type { PlanRecord, RunRecord, Story, UsageReport } from "@/lib/types"
+import type { ChannelRecord, OutlierVideo, PlanRecord, RunRecord, Story, UsageReport } from "@/lib/types"
 
 /** Returns a function that runs `fn` at most once per `ms` (trailing call kept). */
 function useThrottle(fn: () => void, ms: number) {
@@ -98,4 +98,18 @@ export function useStory(id: number | null) {
     if (event.data.story_id === id) void swr.mutate()
   })
   return swr
+}
+
+export function useOutliers() {
+  const swr = useSWR<OutlierVideo[]>("/api/outliers", fetcher)
+  const refresh = useThrottle(() => void swr.mutate(), 800)
+  useEngineEvent(["run.status", "story.changed"], (event) => {
+    if (event.type === "story.changed" || (event.data.agent === "outlier" && event.data.status === "succeeded"))
+      refresh()
+  })
+  return swr
+}
+
+export function useChannels() {
+  return useSWR<ChannelRecord[]>("/api/channels", fetcher)
 }

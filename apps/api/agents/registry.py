@@ -69,7 +69,8 @@ AGENTS: dict[str, AgentInfo] = {
         description="Finds competitor videos that beat their channel median",
         uses_claude=False,
         uses_youtube_quota=True,
-        arrives_in="Phase 4",
+        runner="apps.api.agents.outlier:run",
+        estimate="apps.api.agents.outlier:estimate",
         params_model=OutlierParams,
     ),
     "researcher": AgentInfo(

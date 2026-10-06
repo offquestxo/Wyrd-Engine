@@ -13,7 +13,7 @@ from fastapi.sse import EventSourceResponse, ServerSentEvent
 from pydantic import BaseModel
 from sqlmodel import Session, col, select
 
-from apps.api import sources, stories
+from apps.api import outliers, sources, stories
 from apps.api.agents.registry import AGENTS
 from apps.api.config import load_engine, load_providers
 from apps.api.config_files import ConfigError, ConfigFile, read_config, write_config
@@ -376,6 +376,33 @@ async def update_story_endpoint(story_id: int, patch: stories.StoryPatch) -> dic
         raise HTTPException(404, f"no story {story_id}")
     bus.publish("story.changed", story_id=story_id, status=story["status"])
     return story
+
+
+# ---------------------------------------------------------------------------- outliers
+@app.get("/api/outliers")
+async def list_outliers_endpoint(
+    channel: str | None = None,
+    format: str | None = None,
+    min_score: float | None = None,
+    limit: int = 200,
+) -> list[dict[str, Any]]:
+    return outliers.list_outliers(
+        get_engine(), channel=channel, format=format, min_score=min_score, limit=min(limit, 1000)
+    )
+
+
+@app.get("/api/channels")
+async def list_channels_endpoint() -> list[dict[str, Any]]:
+    return outliers.list_channels(get_engine())
+
+
+@app.post("/api/outliers/{video_id}/story")
+async def story_from_outlier(video_id: str) -> dict[str, Any]:
+    result = outliers.create_story_from_outlier(get_engine(), video_id)
+    if result is None:
+        raise HTTPException(404, f"no scanned video {video_id}")
+    bus.publish("story.changed", story_id=result["story_id"], status="Inbox")
+    return result
 
 
 # ---------------------------------------------------------------------------- usage

@@ -75,7 +75,16 @@ gap_finder:
 outlier:
   default_threshold: 3.0
   default_videos_per_channel: 50
-  shorts_max_duration_s: 180         # YouTube Shorts can be up to 3 minutes (re-verify in Phase 4)
+  # Shorts rule (support.google.com/youtube/answer/15424877, verified 2026-10-05): a square or
+  # vertical video up to 3 minutes is a Short if uploaded on/after 2024-10-15; before that the
+  # limit was 60 s. Aspect ratio comes from videos.list player.embedWidth/embedHeight.
+  shorts_max_duration_s: 180
+  shorts_long_limit_from: "2024-10-15"
+  shorts_max_duration_before_s: 60
+  min_age_days: 3                    # newer videos are still gaining views: not flagged or in medians
+  min_videos_for_median: 5           # per channel and format
+  analyze_max: 25                    # flagged videos sent to analysis per run (not already analysed)
+  analyze_batch: 8
 
 series:
   - Childhood Brands
