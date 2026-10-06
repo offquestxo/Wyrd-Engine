@@ -37,6 +37,7 @@ class ItemScore(BaseModel):
     hook: str
     series: Series
     format: Literal["Short", "Long"]
+    company: str | None = Field(default=None, description="main company/brand, if any")
 
 
 class ScoreBatch(BaseModel):

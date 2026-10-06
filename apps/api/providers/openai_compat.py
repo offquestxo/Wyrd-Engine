@@ -63,6 +63,19 @@ class OpenAICompatProvider:
         finally:
             if self._client is None:
                 await client.aclose()
+        if resp.status_code == 429 and any(
+            v.strip() == "0"
+            for k, v in resp.headers.items()
+            if k.lower().startswith("x-ratelimit-limit")
+        ):
+            raise ProviderError(
+                self.name,
+                "HTTP 429: this account's rate limit is 0 (no free-tier quota on the plan). "
+                "Check the provider's limits/plan page "
+                "(Mistral: admin.mistral.ai/plateforme/limits).",
+                status=429,
+                block=True,
+            )
         if resp.status_code >= 400:
             retry_after = resp.headers.get("retry-after")
             raise ProviderError(

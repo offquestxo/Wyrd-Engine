@@ -248,3 +248,18 @@ async def test_missing_oauth_credentials_are_logged_once_per_run(tmp_path: Any) 
         current_run_once.reset(t2)
     gemini_lines = [m for m in logged if m.startswith("warn: gemini skipped")]
     assert len(gemini_lines) == 1 and "Application Default Credentials" in gemini_lines[0]
+
+
+@respx.mock
+async def test_zero_rate_limit_is_a_block_not_a_retry() -> None:
+    respx.post("https://api.mistral.ai/v1/chat/completions").respond(
+        429,
+        json={"message": "Rate limit exceeded"},
+        headers={"x-ratelimit-limit-req-minute": "0", "x-ratelimit-remaining-req-minute": "0"},
+    )
+    p = MistralProvider(
+        base_url="https://api.mistral.ai/v1", api_key="k", api_key_env="MISTRAL_API_KEY"
+    )
+    with pytest.raises(ProviderError) as exc:
+        await p.chat(model="mistral-small-latest", system="s", user="u", json_mode=True)
+    assert exc.value.block and not exc.value.retryable and "limit is 0" in str(exc.value)
