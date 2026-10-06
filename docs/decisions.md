@@ -198,3 +198,25 @@ The owner needs to activate the free Experiment plan (or check limits) at `admin
 **Scoring speed is the bottleneck: 8 minutes for 75 items.** Groq's free tier allows 8K tokens per minute, so after the first batch it's near its limit and the router uses fallbacks. Gemini returned 500/503 ("high demand") during the runs, and Mistral is blocked (above), so NVIDIA (~30 s per batch) did most of the work. Every item was still scored. Ways to speed it up: a working Mistral quota, a paid Groq tier, or lowering `max_items_to_score`.
 
 **Scout hooks are leads, not research.** They're generated from the headline and snippet with "don't invent facts" in the prompt, but they're unverified. Verified facts only come from @researcher dossiers (Phase 6).
+
+## Faster scoring, unverified hooks, v2 roadmap (2026-10-05)
+
+**Parallel scoring** (`providers/parallel.py`): `score_items` batches go to every usable provider in the route at once instead of one after another.
+- **Lanes:** each provider/model is a lane with its own worker(s) and batch size (`max_request_tokens`, capped by tpm × `safety_ratio`). Each lane has a 60-second rate window (rpm and tpm from providers.yaml, seeded with the last minute of real usage from `provider_usage`), and a lane at ≥98% of its daily rpd/tpd doesn't start.
+- **Failures:** failed batches go back on the queue for any lane. A lane drops out on a block (bad credentials or zero quota) or after `max_failures_per_lane` failures in a row.
+- **OpenRouter** (`last_resort`) only takes work after all other lanes have dropped out, which protects its 50 free requests/day.
+- **Hedging:** when the queue is empty, an idle lane re-runs any batch that's been in flight longer than `hedge_after_s` (30 s). The first result wins and the slower request is cancelled once every item is scored.
+- **Run logs** name the provider/model that scored each batch, and stories store `scores.scored_by`.
+- **Result:** 75 live items scored in **47 s** (was ~8 min): Groq 19, NVIDIA 56, with Gemini's 500s hedged around. Mistral is blocked by its zero quota and joins automatically once the Experiment plan is active.
+- **Groq fix:** gpt-oss at default reasoning effort failed Groq's JSON validation (`json_validate_failed`); `reasoning_effort: low` (providers.yaml `extra`) fixed it, at about 1 s per batch.
+
+**Pre-filter** (`scoring.yaml` `prefilter`): before any LLM call, news items are dropped if the headline has too few words, matches a noise pattern (advice threads, recipes, sports, promos), or comes from Hacker News/Reddit without a business keyword (whole-word match, so "sec" doesn't match "second"). The run log reports counts per rule.
+
+**Unverified hooks:** scout hooks show an **UNVERIFIED LEAD** badge (with an explanation tooltip) in the Stories table, the board and the detail drawer. Verified facts come only from @researcher dossiers.
+
+**v2 roadmap** added to SPEC.md §13 (Phases 8–10, plus @factcheck and scheduled runs later). Not built. Changes to Phases 4–7 that make it easier:
+- **Phase 4 (@outlier):** keep `channels`/`videos` generic, with an `is_own` flag on channels, so Phase 10 can store the owner's videos and analytics in the same tables. Store duration, publish time and thumbnail URL per video.
+- **Phase 5 (chat):** the browser should call the API **through the web app's own origin**: Next.js forwards `/api/*` to 127.0.0.1:8000 instead of the browser calling `http://127.0.0.1:8000` directly. Then a single `tailscale serve` of port 3000 works on a phone, where 127.0.0.1 would mean the phone. SSE must stream through that proxy (verify, or serve `/api` on a separate tailnet path). Build the chat UI responsive from the start.
+- **Phase 6 (@researcher):** besides the markdown, store Key Numbers, Timeline, quotes and locations as **structured JSON** in `dossiers.sources_json` / a new field, each with source URL and excerpt. @graphics then renders counters, charts, timelines, quote cards and map pins straight from verified data. Define the `[GRAPHIC: type | value | source#n]` cue syntax in the dossier export so Script Room scripts are parseable later.
+- **Stories:** add `video_url` / `published_at` (set when status → Published) so Phase 10 can join analytics to stories and their scores. Mirror them in Notion in Phase 7.
+- **Google OAuth:** Gemini uses ADC with fixed scopes. Phase 10's YouTube Analytics access should use **its own stored OAuth token** (read-only YouTube scopes, possibly a different Google account) rather than widening the ADC login, so a weekly Gemini re-login never breaks analytics and vice versa.

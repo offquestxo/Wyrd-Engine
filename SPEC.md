@@ -371,3 +371,28 @@ Build one phase at a time. At the end of each phase: run tests, verify acceptanc
 - No scheduled runs (on-demand only).
 - No script writing inside the engine (scripting happens in the owner's Claude Project "Script Room"; the engine only exports dossiers for it).
 - No fact-check or graphics agents yet (reserved slots only).
+
+## 13. v2 Roadmap
+
+Planned after v1 (Phases 0–7). **Nothing here is built yet.** Each phase follows the same rules as v1: verify current docs, licenses and limits first, build one phase at a time, and stop for review. Facts below were checked on 2026-10-05; re-verify them at build time.
+
+**Phase 8: @graphics**
+- Reads `[GRAPHIC]` cues from finished scripts (exported from Script Room) and renders each as a **transparent video clip** for the edit, using Remotion templates.
+- Templates: animated counters ("$1.4B"), bar/line charts, timelines, map pins, quote cards, logo reveals. Every number, date and quote must come from the story's dossier (Key Numbers, Timeline, sources), never from the script text alone.
+- Output: transparent clips (ProRes 4444 / WebM with alpha), one per cue, named by cue order, saved under `research/<slug>/graphics/`. Renders run as normal agent jobs with plan approval.
+- License: Remotion is free for individuals, for-profit companies with up to 3 employees, and non-profits; larger companies need a Company License (remotion-dev/remotion `LICENSE.md`). Confirm the current terms before building.
+
+**Phase 9: phone access**
+- Reach the app from the owner's phone over **Tailscale** (free Personal plan: up to 6 users, unlimited devices) with `tailscale serve`, which proxies a local port to HTTPS on the tailnet only (not public; Funnel is a separate, public feature). Servers stay bound to 127.0.0.1; Tailscale forwards to them. Serve requires HTTPS certificates to be enabled for the tailnet.
+- The browser must reach the API through the same origin as the web app (see decisions), so one served port is enough.
+- Mobile-friendly layout pass: sidebar becomes a bottom/drawer nav, Stories board scrolls horizontally, plan cards and run logs fit a phone, touch-friendly approve/cancel.
+- Verify the current free plan and the `tailscale serve` syntax before building.
+
+**Phase 10: analytics feedback loop**
+- Connect the owner's YouTube channel with Google OAuth (read-only scopes) and pull each published video's views, average view duration, average view percentage, and retention curve (`audienceWatchRatio`) from the **YouTube Analytics API**.
+- Thumbnail impressions and click-through rate are documented in the **YouTube Reporting API** (`video_thumbnail_impressions`, `video_thumbnail_impressions_ctr`, bulk daily reports). Check whether the Analytics API exposes them too before choosing.
+- Link each video to its story, compare performance with the story's @scout scores, and **suggest** (never auto-apply) rubric weight changes in Settings, with the evidence (e.g. "twist correlates with retention; freshness doesn't").
+
+**Later (unscheduled)**
+- **@factcheck**: claim extraction from scripts and verification against dossier sources (see `fact-check-protocol.md`).
+- **Scheduled runs**: local cron and/or GitHub Actions for recurring scouts and outlier scans (still plan-gated unless auto-approve is on).
