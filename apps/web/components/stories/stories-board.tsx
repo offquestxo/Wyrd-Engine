@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 
+import { UnverifiedBadge } from "@/components/common/badges"
 import { STORY_STATUSES, type Story, type StoryStatus } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
@@ -66,7 +67,12 @@ export function StoriesBoard({
                   )}
                 >
                   <p className="text-sm font-medium">{story.title}</p>
-                  <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{story.hook}</p>
+                  {story.hook && (
+                    <div className="mt-1">
+                      <UnverifiedBadge compact />
+                      <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{story.hook}</p>
+                    </div>
+                  )}
                   <div className="mt-2 flex items-center justify-between font-mono text-[10px] text-muted-foreground">
                     <span>{story.series ?? "—"}</span>
                     <span className="text-foreground/80">{story.total_score ?? "—"}</span>

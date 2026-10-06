@@ -5,7 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useMemo, useState } from "react"
 import { toast } from "sonner"
 
-import { ScoreBar, StoryStatusBadge } from "@/components/common/badges"
+import { ScoreBar, StoryStatusBadge, UnverifiedBadge } from "@/components/common/badges"
 import { PageHeader } from "@/components/common/page-header"
 import { EmptyState, ErrorState, LoadingState } from "@/components/common/states"
 import { ScoutLauncher } from "@/components/stories/scout-launcher"
@@ -178,7 +178,12 @@ export function StoriesView() {
                 >
                   <TableCell className="max-w-md">
                     <p className="truncate font-medium">{s.title}</p>
-                    <p className="truncate text-xs text-muted-foreground">{s.hook}</p>
+                    {s.hook && (
+                      <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <UnverifiedBadge compact />
+                        <span className="truncate">{s.hook}</span>
+                      </p>
+                    )}
                   </TableCell>
                   <TableCell><StoryStatusBadge status={s.status} /></TableCell>
                   <TableCell className="text-xs text-muted-foreground">{s.series ?? "—"}</TableCell>

@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/badge"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import type { RunStatus, StoryStatus } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
@@ -52,5 +53,27 @@ export function ScoreBar({ value, max = 10 }: { value: number; max?: number }) {
       </div>
       <span className="w-7 font-mono text-xs tabular-nums text-muted-foreground">{value}</span>
     </div>
+  )
+}
+
+/** Marks LLM-written scout hooks: leads to check, not facts (facts come from dossiers). */
+export function UnverifiedBadge({ compact = false }: { compact?: boolean }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          className={cn(
+            "inline-flex shrink-0 items-center rounded border border-warning/40 font-mono text-warning uppercase",
+            compact ? "px-1 text-[9px] leading-4" : "px-1.5 py-px text-[10px]",
+          )}
+        >
+          Unverified lead
+        </span>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-64">
+        Written by @scout from a headline or summary. Not fact-checked; verified facts come only from
+        @researcher dossiers.
+      </TooltipContent>
+    </Tooltip>
   )
 }
