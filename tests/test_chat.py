@@ -488,3 +488,109 @@ def test_command_uses_tight_allowlist() -> None:
     resumed = orchestrator.build_command("claude", OrchestratorConfig(), 7, "sid", resume=True)
     assert "--resume" in resumed and "--session-id" not in resumed
     assert "Company Man = @companyman114" in cmd[cmd.index("--system-prompt") + 1]
+
+
+# ---------------------------------------------------------------------------- MCP connect race
+class FakeProc:
+    """A fake `claude -p` process that writes the given stream-json lines."""
+
+    def __init__(self, lines: list[dict[str, Any]], returncode: int = 0) -> None:
+        self.stdout = asyncio.StreamReader()
+        for line in lines:
+            self.stdout.feed_data((json.dumps(line) + "\n").encode())
+        self.stdout.feed_eof()
+        self.stderr = asyncio.StreamReader()
+        self.stderr.feed_eof()
+        self.stdin = self
+        self.returncode = returncode
+        self.killed = False
+
+    def write(self, data: bytes) -> None:  # stdin
+        pass
+
+    async def drain(self) -> None:
+        pass
+
+    def close(self) -> None:
+        pass
+
+    def kill(self) -> None:
+        self.killed = True
+
+    async def wait(self) -> int:
+        return self.returncode
+
+
+def init_line(status: str, session_id: str) -> dict[str, Any]:
+    return {
+        "type": "system",
+        "subtype": "init",
+        "session_id": session_id,
+        "model": "m",
+        "mcp_servers": [{"name": "wyrd", "status": status}],
+    }
+
+
+RESULT_LINES = [
+    {"type": "assistant", "message": {"content": [{"type": "text", "text": "ok"}]}},
+    {"type": "result", "is_error": False, "num_turns": 1, "result": "ok", "duration_ms": 5},
+]
+
+
+async def run_fake_turn(
+    monkeypatch: pytest.MonkeyPatch, statuses: list[str], resume: bool = False
+) -> tuple[list[Any], list[FakeProc], list[list[str]]]:
+    procs: list[FakeProc] = []
+    commands: list[list[str]] = []
+
+    async def spawn(*cmd: str, **_: Any) -> FakeProc:
+        status = statuses[len(procs)]
+        flag = "--resume" if "--resume" in cmd else "--session-id"
+        sid = cmd[cmd.index(flag) + 1]  # Claude echoes the session id it was given
+        proc = FakeProc([init_line(status, sid), *RESULT_LINES])
+        procs.append(proc)
+        commands.append(list(cmd))
+        return proc
+
+    async def no_sleep(_s: float) -> None:
+        return None
+
+    monkeypatch.setattr(orchestrator.shutil, "which", lambda _: "/usr/bin/claude")
+    monkeypatch.setattr(orchestrator.asyncio, "create_subprocess_exec", spawn)
+    monkeypatch.setattr(orchestrator.asyncio, "sleep", no_sleep)
+    monkeypatch.setattr(orchestrator, "workdir", lambda cfg: Path("."))
+    out = [
+        ev async for ev in orchestrator.run_turn(OrchestratorConfig(), 1, "first-sid", resume, "hi")
+    ]
+    return out, procs, commands
+
+
+async def test_turn_restarts_when_mcp_not_connected(monkeypatch: pytest.MonkeyPatch) -> None:
+    out, procs, commands = await run_fake_turn(monkeypatch, ["pending", "connected"])
+    assert len(procs) == 2 and procs[0].killed and not procs[1].killed
+    result = out[-1]
+    assert isinstance(result, orchestrator.TurnResult) and result.ok and result.text == "ok"
+    # Nothing from the killed attempt reached the caller; only one result.
+    assert [type(e).__name__ for e in out].count("TurnResult") == 1
+    # A first turn retries with a fresh session id (the old one may be registered).
+    first_sid = commands[0][commands[0].index("--session-id") + 1]
+    second_sid = commands[1][commands[1].index("--session-id") + 1]
+    assert first_sid == "first-sid" and second_sid != first_sid
+    assert result.session_id == second_sid
+
+
+async def test_resumed_turn_keeps_session_on_restart(monkeypatch: pytest.MonkeyPatch) -> None:
+    _, procs, commands = await run_fake_turn(monkeypatch, ["failed", "connected"], resume=True)
+    assert len(procs) == 2
+    assert all(c[c.index("--resume") + 1] == "first-sid" for c in commands)
+
+
+async def test_turn_fails_clearly_when_mcp_never_connects(monkeypatch: pytest.MonkeyPatch) -> None:
+    out, procs, _ = await run_fake_turn(
+        monkeypatch, ["pending"] * orchestrator.MCP_CONNECT_ATTEMPTS
+    )
+    assert len(procs) == orchestrator.MCP_CONNECT_ATTEMPTS and all(p.killed for p in procs)
+    result = out[-1]
+    assert isinstance(result, orchestrator.TurnResult) and not result.ok
+    assert result.error and "MCP tools didn't connect" in result.error
+    assert not any(getattr(e, "kind", None) == "text" for e in out)  # no made-up reply
