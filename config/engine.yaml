@@ -1,0 +1,10 @@
+# Engine behaviour (jobs, quota windows). Editable in Settings.
+
+jobs:
+  max_concurrent_runs: 2      # agent runs executing at once; the rest wait in the queue
+  poll_interval_s: 2.0        # how often the runner checks the queue (it is also woken on enqueue)
+
+usage:
+  # "Today" on the quota meters starts at midnight in this timezone. Google (Gemini, YouTube)
+  # resets daily quotas at midnight Pacific time.
+  day_reset_timezone: America/Los_Angeles

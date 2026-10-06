@@ -145,3 +145,45 @@ async def test_event_bus_replays_history_and_streams() -> None:
     assert [e.id for e in bus.recent(after_id=1)] == [2]
     await stream.aclose()
     assert bus.subscriber_count == 0
+
+
+def test_plan_run_lifecycle_over_http(client: TestClient) -> None:
+    import time
+
+    with client:
+        bad = client.post("/api/plans", json={"summary": "x", "steps": [{"agent": "scout"}]})
+        assert bad.status_code == 422 and "Phase 3" in bad.json()["detail"]
+
+        plan = client.post(
+            "/api/plans",
+            json={
+                "summary": "demo",
+                "steps": [{"agent": "demo", "params": {"steps": 30, "step_seconds": 0.1}}],
+            },
+        ).json()
+        assert plan["status"] == "pending"
+        assert client.get("/api/plans?status=pending").json()[0]["id"] == plan["id"]
+
+        approved = client.post(f"/api/plans/{plan['id']}/approve").json()
+        run_id = approved["steps"][0]["run_id"]
+        assert client.post(f"/api/plans/{plan['id']}/approve").status_code == 409
+
+        for _ in range(100):
+            if client.get(f"/api/runs/{run_id}").json()["status"] == "running":
+                break
+            time.sleep(0.05)
+        cancelled = client.post(f"/api/runs/{run_id}/cancel").json()
+        assert cancelled["status"] == "cancelled"
+        detail = client.get(f"/api/runs/{run_id}").json()
+        assert detail["logs"][-1]["message"] == "Cancelled"
+        assert detail["started_at"].endswith("Z") or "+00:00" in detail["started_at"]
+        listed = client.get("/api/runs?status=cancelled").json()
+        assert listed[0]["id"] == run_id and len(listed[0]["log_tail"]) <= 3
+        assert client.get("/api/runs/99999").status_code == 404
+
+
+def test_usage_endpoint_lists_every_provider(client: TestClient) -> None:
+    with client:
+        meters = {m["provider"]: m for m in client.get("/api/usage").json()["meters"]}
+    assert {"groq", "gemini", "nvidia", "mistral", "openrouter", "youtube", "claude"} <= set(meters)
+    assert meters["youtube"]["limit"] == 10000 and meters["claude"]["unit"] == "runs"
