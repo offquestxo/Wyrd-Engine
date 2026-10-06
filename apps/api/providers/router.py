@@ -292,7 +292,7 @@ class Router:
                     break
                 except ProviderError as e:
                     errors.append(str(e))
-                    if e.status in (401, 403):
+                    if e.block:
                         self._auth_failed_at[step.provider] = self._clock()
                         self._auth_errors[step.provider] = str(e)
                     if e.retryable and attempt + 1 < self.config.retry.max_attempts:
@@ -408,7 +408,9 @@ class Router:
             return [list(items)] if items else []
         overhead = estimate_tokens(
             prompts.render(
-                "scout_scoring", output_schema=json.dumps(ScoreBatch.model_json_schema())
+                "scout_scoring",
+                output_schema=json.dumps(ScoreBatch.model_json_schema()),
+                series_hint="",
             )
         )
         batches: list[list[ItemToScore]] = []
@@ -426,12 +428,23 @@ class Router:
             batches.append(current)
         return batches
 
-    async def score_items(self, items: Sequence[ItemToScore]) -> list[ItemScore]:
-        """Scores items in batches sized to the route's max_request_tokens."""
+    async def score_items(
+        self, items: Sequence[ItemToScore], series_hint: str = ""
+    ) -> list[ItemScore]:
+        """Scores items in batches sized to the route's max_request_tokens.
+
+        `series_hint` is optional extra guidance inserted into the prompt (e.g. the series the
+        owner asked for); it is filled into prompts/scout_scoring.md, not written here."""
         scores: list[ItemScore] = []
         for batch_items in self._score_batches(items):
             payload = [item.model_dump() for item in batch_items]
-            batch = await self._json_task("score_items", "scout_scoring", payload, ScoreBatch)
+            batch = await self._json_task(
+                "score_items",
+                "scout_scoring",
+                payload,
+                ScoreBatch,
+                prompt_vars={"series_hint": series_hint},
+            )
             wanted = {item.id for item in batch_items}
             scores += [score for score in batch.scores if score.id in wanted]
         return scores
@@ -555,7 +568,6 @@ def build_providers(config: ProvidersConfig) -> dict[str, LLMProvider]:
 
     simple: dict[str, type[OpenAICompatProvider]] = {
         "groq": GroqProvider,
-        "mistral": MistralProvider,
         "openrouter": OpenRouterProvider,
     }
     settings = get_settings()
@@ -565,6 +577,14 @@ def build_providers(config: ProvidersConfig) -> dict[str, LLMProvider]:
         if name in simple:
             built[name] = simple[name](
                 base_url=pc.base_url or "", api_key=key, api_key_env=pc.api_key_env or ""
+            )
+        elif name == "mistral":
+            small = pc.models.get("small")
+            built[name] = MistralProvider(
+                base_url=pc.base_url or "",
+                api_key=key,
+                api_key_env=pc.api_key_env or "",
+                probe_model=small.id if small else "",
             )
         elif name == "nvidia":
             embed = pc.models.get("embed")
@@ -592,8 +612,8 @@ def get_router() -> Router:
 
 
 # Module-level task functions — the API agents use.
-async def score_items(items: Sequence[ItemToScore]) -> list[ItemScore]:
-    return await get_router().score_items(items)
+async def score_items(items: Sequence[ItemToScore], series_hint: str = "") -> list[ItemScore]:
+    return await get_router().score_items(items, series_hint)
 
 
 async def parse_mention(text: str) -> MentionParse:

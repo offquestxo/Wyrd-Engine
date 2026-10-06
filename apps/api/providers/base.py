@@ -22,12 +22,16 @@ class ProviderError(Exception):
         status: int | None = None,
         retryable: bool = False,
         retry_after_s: float | None = None,
+        block: bool = False,
     ) -> None:
         super().__init__(f"{provider}: {message}")
         self.provider = provider
         self.status = status
         self.retryable = retryable
         self.retry_after_s = retry_after_s
+        # block: the account can't use this provider right now (bad key, zero quota);
+        # the router skips it for auth_failure_cooldown_s instead of retrying.
+        self.block = block or status in (401, 403)
 
 
 class MissingKeyError(ProviderError):

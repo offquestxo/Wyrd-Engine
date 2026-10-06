@@ -8,12 +8,19 @@ http:
     efts.sec.gov: 0.15
     data.sec.gov: 0.15
     api.gdeltproject.org: 5.5  # GDELT asks for at most one request every 5 s
-    www.reddit.com: 2.0
+    www.reddit.com: 7.0        # unauthenticated RSS returns 429 below ~6 s spacing
     www.courtlistener.com: 1.0
     www.loc.gov: 1.0
     default: 0.2
 
 news:
+  # With a topic, these suffixes build Google News queries ("<topic> <suffix>"); feeds and
+  # other sources are searched for the topic itself.
+  topic_query_suffixes:
+    - ""
+    - "company"
+    - "scandal"
+    - "bankruptcy"
   google_news_queries:
     - "company bankruptcy"
     - "accounting fraud SEC charges"
@@ -46,4 +53,6 @@ evergreen:
     - "Category:Corporate scandals"
     - "Category:Defunct technology companies of the United States"
   pageview_days: 60
-  top_n_for_youtube_check: 20
+  per_category: 40                # article titles taken from each category
+  max_articles_detailed: 60       # longest articles get refs/pageviews fetched and are pre-scored
+  top_n_for_youtube_check: 20     # best pre-scored articles get a YouTube coverage check
