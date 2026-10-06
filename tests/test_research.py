@@ -177,6 +177,7 @@ async def test_save_moves_failed_rows_and_exports(engine: Any, tmp_path: Path) -
         "failed": 3,
         "truncated": 0,
         "prose_numbers_unverified": 0,
+        "support_check": "skipped (no checker configured)",
     }
     assert result["primary_sources"] == 1
 
@@ -257,6 +258,64 @@ async def test_prose_numbers_must_come_from_a_cited_source(engine: Any, tmp_path
     assert "2 number(s) in the prose weren't found" in md
 
 
+async def test_support_check_trims_or_moves_overstated_claims(engine: Any, tmp_path: Path) -> None:
+    from apps.api.providers.schemas import SupportItem, SupportVerdict
+
+    seen: list[SupportItem] = []
+
+    async def support(items: list[SupportItem]) -> list[SupportVerdict]:
+        seen.extend(items)
+        out = []
+        for item in items:
+            if item.claim.startswith("2008-11-10"):  # trim the motive the excerpt doesn't give
+                out.append(
+                    SupportVerdict(
+                        id=item.id,
+                        supported=False,
+                        unsupported_parts=["after the board lost faith"],
+                        trimmed_claim="2008-11-10: Files for Chapter 11",
+                    )
+                )
+            elif item.claim.startswith("682"):  # nothing salvageable
+                out.append(
+                    SupportVerdict(id=item.id, supported=False, unsupported_parts=["record high"])
+                )
+            else:
+                out.append(SupportVerdict(id=item.id, supported=True))
+        return out
+
+    d = make_dossier()
+    d.timeline[0].event = "Files for Chapter 11 after the board lost faith"
+    d.key_numbers[3].meaning = "Record-high Superstore count"
+    result = await dmod.save_dossier(engine, 1, d, lookup, research_dir=tmp_path, support=support)
+    # Only rows that passed the excerpt check are sent: timeline 1, $11.7B, 682, twist = 4.
+    assert len(seen) == 4 and {i.claim[:4] for i in seen} >= {"2008", "$11.", "682 "}
+    check = result["excerpt_check"]
+    assert check["support_check"] == "4 checked: 1 trimmed, 1 moved"
+    assert (check["passed"], check["failed"]) == (3, 4)
+    md = (tmp_path / "circuit-city" / "dossier.md").read_text()
+    facts, unverified = md.split("## Open Questions / Unverified")
+    assert "**2008-11-10**: Files for Chapter 11 [[2]]" in facts and "board" not in facts
+    assert "| 682 |" not in facts
+    assert (
+        "Trimmed from “2008-11-10: Files for Chapter 11 after the board lost faith”" in unverified
+    )
+    assert "682 — Record-high Superstore count — excerpt doesn't support: record high" in unverified
+
+
+async def test_support_check_failure_keeps_rows_and_says_so(engine: Any, tmp_path: Path) -> None:
+    from apps.api.providers.base import ProviderError
+
+    async def down(items: list[Any]) -> list[Any]:
+        raise ProviderError("groq", "HTTP 503")
+
+    result = await dmod.save_dossier(
+        engine, 1, make_dossier(), lookup, research_dir=tmp_path, support=down
+    )
+    assert result["excerpt_check"]["passed"] == 4
+    assert result["excerpt_check"]["support_check"].startswith("unavailable")
+
+
 def test_prose_number_parsing() -> None:
     found = {
         w: (v, t) for w, v, t in dmod.prose_numbers("$12.43 billion, 654 stores, in 2008, 3 CEOs")
@@ -299,6 +358,11 @@ class ToolRouter:
             found=True,
             extracts=[Extract(quote="Net sales decreased 4.4 percent")],
         )
+
+    async def check_support(self, items: list[Any]) -> list[Any]:
+        from apps.api.providers.schemas import SupportVerdict
+
+        return [SupportVerdict(id=i.id, supported=True) for i in items]
 
     async def second_opinion(self, markdown: str) -> SecondOpinion:
         return SecondOpinion(
@@ -399,6 +463,7 @@ async def test_save_requires_second_opinion_then_reports_checks(research_env: An
         "failed": 3,
         "truncated": 0,
         "prose_numbers_unverified": 0,
+        "support_check": "4 checked: 0 trimmed, 0 moved",
     }
     assert (research_env["tmp"] / "research" / "circuit-city" / "dossier.md").exists()
     with Session(research_env_engine(research_env)) as s:
