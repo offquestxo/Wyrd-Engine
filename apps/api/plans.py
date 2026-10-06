@@ -11,7 +11,7 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, Field, ValidationError, field_validator
 from sqlalchemy import Engine
 from sqlmodel import Session, col, select
 
@@ -38,8 +38,13 @@ class PlanError(ValueError):
 
 
 class StepIn(BaseModel):
-    agent: str
+    agent: str = Field(description='Agent name, e.g. "scout"')
     params: dict[str, Any] = {}
+
+    @field_validator("agent")
+    @classmethod
+    def _bare_name(cls, value: str) -> str:
+        return value.strip().lstrip("@").lower()  # "@scout" → "scout"
 
 
 class PlanIn(BaseModel):

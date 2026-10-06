@@ -46,8 +46,12 @@ export function useChat(id: number | null) {
     void swr.mutate((chat) => chat && fn(chat), { revalidate: false })
   }
 
-  useEngineEvent(["chat.message", "chat.delta", "chat.status", "chat.tool", "plan.status"], (event) => {
+  useEngineEvent(["chat.message", "chat.delta", "chat.status", "chat.tool", "chat.changed", "plan.status"], (event) => {
     const data = event.data
+    if (event.type === "chat.changed") {
+      if (data.chat_id === id && !data.deleted) void swr.mutate() // title or session changed
+      return
+    }
     if (event.type === "plan.status") {
       const plans = swr.data?.plans ?? {}
       if (String(data.plan_id) in plans || data.chat_id === id) void swr.mutate()
