@@ -265,7 +265,7 @@ async def test_two_step_plan_results_flow_back_to_orchestrator(svc: Any) -> None
                 {
                     "summary": "10 fraud stories + Company Man outliers",
                     "steps": [
-                        {"agent": "scout", "params": {"topic": "fraud", "limit": 10}},
+                        {"agent": "@scout", "params": {"topic": "fraud", "limit": 10}},
                         {"agent": "outlier", "params": {"channels": ["@companyman114"]}},
                     ],
                 },

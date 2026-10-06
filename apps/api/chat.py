@@ -260,10 +260,16 @@ class ChatService:
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)
 
-    async def drain(self) -> None:
-        """Wait for background chat work (tests, shutdown)."""
+    async def drain(self, timeout_s: float = 30.0) -> None:
+        """Wait for background chat work (tests). Fails loudly instead of hanging."""
+        deadline = asyncio.get_running_loop().time() + timeout_s
         while self._tasks:
-            await asyncio.gather(*list(self._tasks), return_exceptions=True)
+            remaining = deadline - asyncio.get_running_loop().time()
+            _, pending = await asyncio.wait(list(self._tasks), timeout=max(0.0, remaining))
+            if pending and asyncio.get_running_loop().time() >= deadline:
+                for task in pending:
+                    task.print_stack()
+                raise TimeoutError(f"{len(pending)} chat task(s) still running after {timeout_s}s")
 
     async def stop(self) -> None:
         for task in list(self._tasks):
