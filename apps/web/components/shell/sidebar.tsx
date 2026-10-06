@@ -8,12 +8,20 @@ import { useEvents } from "@/hooks/use-events"
 import { NAV } from "@/lib/nav"
 import { cn } from "@/lib/utils"
 
-export function Sidebar({ onOpenPalette }: { onOpenPalette: () => void }) {
+export function Sidebar({
+  onOpenPalette,
+  onNavigate,
+  className,
+}: {
+  onOpenPalette: () => void
+  onNavigate?: () => void
+  className?: string
+}) {
   const pathname = usePathname()
   const { status } = useEvents()
 
   return (
-    <aside className="flex h-full w-56 shrink-0 flex-col border-r border-sidebar-border bg-sidebar">
+    <aside className={cn("flex h-full w-56 shrink-0 flex-col border-r border-sidebar-border bg-sidebar", className)}>
       <div className="flex h-14 items-center px-4">
         <Link href="/" className="font-mono text-sm font-semibold tracking-tight text-foreground">
           wyrd<span className="text-brand">.exe</span>
@@ -35,6 +43,7 @@ export function Sidebar({ onOpenPalette }: { onOpenPalette: () => void }) {
             <Link
               key={item.href}
               href={item.href}
+              onClick={onNavigate}
               aria-current={active ? "page" : undefined}
               className={cn(
                 "group flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-foreground",

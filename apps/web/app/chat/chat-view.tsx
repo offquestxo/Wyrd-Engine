@@ -16,6 +16,7 @@ import {
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useEffect, useRef, useState } from "react"
 import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
 import useSWR from "swr"
 import { toast } from "sonner"
 
@@ -84,11 +85,7 @@ export function ChatView() {
         method: "POST",
         body: JSON.stringify({ content: text }),
       })
-      if (id === activeId && chat.data)
-        await chat.mutate(
-          (c) => c && { ...c, messages: c.messages.some((m) => m.id === message.id) ? c.messages : [...c.messages, message] },
-          { revalidate: false },
-        )
+      chat.addLocal(message)
       if (activeId !== id) select(id)
     } catch (e) {
       toast.error((e as Error).message)
@@ -161,7 +158,7 @@ export function ChatView() {
             ) : chats.error ? (
               <ErrorState error={chats.error as Error} onRetry={() => void chats.mutate()} />
             ) : chat.error ? (
-              <ErrorState error={chat.error as Error} onRetry={() => void chat.mutate()} />
+              <ErrorState error={chat.error} onRetry={() => void chat.mutate()} />
             ) : !activeId ? (
               <EmptyState
                 icon={MessagesSquareIcon}
@@ -350,8 +347,8 @@ function Message({
       <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md bg-brand-muted">
         <BotIcon className="size-3.5 text-brand" />
       </div>
-      <div className="min-w-0 flex-1 text-sm leading-6 [&_a]:text-brand [&_a]:underline [&_li]:ml-4 [&_ol]:list-decimal [&_p]:my-1.5 [&_strong]:font-semibold [&_ul]:list-disc">
-        {text ? <ReactMarkdown>{text}</ReactMarkdown> : null}
+      <div className="min-w-0 flex-1 overflow-x-auto text-sm leading-6 [&_a]:text-brand [&_a]:underline [&_hr]:my-3 [&_hr]:border-border [&_li]:ml-4 [&_ol]:list-decimal [&_p]:my-1.5 [&_strong]:font-semibold [&_table]:my-2 [&_table]:text-xs [&_td]:border-b [&_td]:px-2 [&_td]:py-1 [&_th]:border-b [&_th]:px-2 [&_th]:py-1 [&_th]:text-left [&_th]:font-medium [&_ul]:list-disc">
+        {text ? <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown> : null}
         {streaming && (
           <p className="flex items-center gap-2 text-xs text-muted-foreground">
             <Loader2Icon className="size-3 animate-spin" /> {activity ?? (text ? "Writing…" : "Thinking…")}
