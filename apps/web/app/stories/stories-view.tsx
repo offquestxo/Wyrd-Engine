@@ -8,6 +8,7 @@ import { toast } from "sonner"
 import { ScoreBar, StoryStatusBadge } from "@/components/common/badges"
 import { PageHeader } from "@/components/common/page-header"
 import { EmptyState, ErrorState, LoadingState } from "@/components/common/states"
+import { ScoutLauncher } from "@/components/stories/scout-launcher"
 import { StoriesBoard } from "@/components/stories/stories-board"
 import { StoryDrawer } from "@/components/stories/story-drawer"
 import { Button } from "@/components/ui/button"
@@ -15,10 +16,10 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { useDemo } from "@/hooks/use-demo"
+import { useStories } from "@/hooks/use-live"
 import { useLocalState } from "@/hooks/use-local-state"
-import { timeAgo, totalScore } from "@/lib/format"
-import { MOCK_STORIES } from "@/lib/mock"
+import { api } from "@/lib/api"
+import { timeAgo } from "@/lib/format"
 import { SERIES, STORY_STATUSES, type Story, type StoryStatus } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
@@ -29,10 +30,8 @@ export function StoriesView() {
   const router = useRouter()
   const pathname = usePathname()
   const params = useSearchParams()
-  const { data, isLoading, error, retry } = useDemo(MOCK_STORIES, [])
-  // Local status changes layered over the loaded stories (persisted in Phase 3).
-  const [edited, setStories] = useState<Story[] | null>(null)
-  const stories = useMemo(() => edited ?? data ?? [], [edited, data])
+  const { data, isLoading, error, mutate } = useStories()
+  const stories = useMemo(() => data ?? [], [data])
   const [view, setView] = useLocalState<"table" | "board">("wyrd.storiesView", "table")
   const [query, setQuery] = useState("")
   const [status, setStatus] = useState<string>(ALL)
@@ -42,7 +41,6 @@ export function StoriesView() {
   const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: "score", desc: true })
 
   const openId = Number(params.get("story")) || null
-  const openStory = stories.find((s) => s.id === openId) ?? null
   const setOpen = (story: Story | null) => {
     const next = new URLSearchParams(params)
     if (story) next.set("story", String(story.id))
@@ -50,9 +48,16 @@ export function StoriesView() {
     router.replace(`${pathname}${next.size ? `?${next}` : ""}`, { scroll: false })
   }
 
-  const move = (story: Story, to: StoryStatus) => {
-    setStories(stories.map((s) => (s.id === story.id ? { ...s, status: to, updated_at: new Date().toISOString() } : s)))
-    toast.success(`${story.title} → ${to}`, { description: "Sample data: saved locally until Phase 3." })
+  const move = async (story: Story, to: StoryStatus) => {
+    // Optimistic: show the move at once, then confirm with the server.
+    await mutate(stories.map((s) => (s.id === story.id ? { ...s, status: to } : s)), { revalidate: false })
+    try {
+      await api<Story>(`/api/stories/${story.id}`, { method: "PATCH", body: JSON.stringify({ status: to }) })
+      toast.success(`${story.title} → ${to}`)
+    } catch (e) {
+      toast.error((e as Error).message)
+    }
+    await mutate()
   }
 
   const filtered = useMemo(() => {
@@ -62,16 +67,21 @@ export function StoriesView() {
         (status === ALL || s.status === status) &&
         (series === ALL || s.series === series) &&
         (format === ALL || s.format === format) &&
-        (minScore === ALL || totalScore(s.scores) >= Number(minScore)) &&
-        (!q || `${s.title} ${s.company} ${s.hook}`.toLowerCase().includes(q)),
+        (minScore === ALL || (s.total_score ?? 0) >= Number(minScore)) &&
+        (!q || `${s.title} ${s.company ?? ""} ${s.hook ?? ""}`.toLowerCase().includes(q)),
     )
     const value = (s: Story): string | number => {
       switch (sort.key) {
-        case "title": return s.title.toLowerCase()
-        case "status": return STORY_STATUSES.indexOf(s.status)
-        case "score": return totalScore(s.scores)
-        case "gap": return s.gap_score ?? -1
-        case "updated": return s.updated_at
+        case "title":
+          return s.title.toLowerCase()
+        case "status":
+          return STORY_STATUSES.indexOf(s.status)
+        case "score":
+          return s.total_score ?? -1
+        case "gap":
+          return s.gap_score ?? -1
+        case "updated":
+          return s.updated_at
       }
     }
     return [...rows].sort((a, b) => {
@@ -88,14 +98,16 @@ export function StoriesView() {
       <PageHeader
         title="Stories"
         description="Every candidate story, from Inbox to Published."
-        sample
         actions={
-          <Tabs value={view} onValueChange={(v) => setView(v as "table" | "board")}>
-            <TabsList>
-              <TabsTrigger value="table"><TableIcon /> Table</TabsTrigger>
-              <TabsTrigger value="board"><KanbanIcon /> Board</TabsTrigger>
-            </TabsList>
-          </Tabs>
+          <>
+            <Tabs value={view} onValueChange={(v) => setView(v as "table" | "board")}>
+              <TabsList>
+                <TabsTrigger value="table"><TableIcon /> Table</TabsTrigger>
+                <TabsTrigger value="board"><KanbanIcon /> Board</TabsTrigger>
+              </TabsList>
+            </Tabs>
+            <ScoutLauncher />
+          </>
         }
       />
 
@@ -109,7 +121,17 @@ export function StoriesView() {
         <Filter value={format} onChange={setFormat} label="Format" options={["Short", "Long"]} />
         <Filter value={minScore} onChange={setMinScore} label="Score" options={["6", "7", "8"]} format={(v) => `≥ ${v}`} />
         {filtersActive && (
-          <Button variant="ghost" size="sm" onClick={() => { setQuery(""); setStatus(ALL); setSeries(ALL); setFormat(ALL); setMinScore(ALL) }}>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setQuery("")
+              setStatus(ALL)
+              setSeries(ALL)
+              setFormat(ALL)
+              setMinScore(ALL)
+            }}
+          >
             Clear
           </Button>
         )}
@@ -119,18 +141,18 @@ export function StoriesView() {
       {isLoading ? (
         <LoadingState rows={8} />
       ) : error ? (
-        <ErrorState error={error} onRetry={retry} />
+        <ErrorState error={error as Error} onRetry={() => void mutate()} />
       ) : stories.length === 0 ? (
         <EmptyState
           icon={LayersIcon}
           title="No stories yet"
           description="Run @scout to find story leads. They land here with status Inbox."
-          action={<Button size="sm" onClick={() => router.push("/chat?compose=%40scout%20")}>Run @scout</Button>}
+          action={<ScoutLauncher />}
         />
       ) : filtered.length === 0 ? (
         <EmptyState icon={SearchIcon} title="No stories match these filters" />
       ) : view === "board" ? (
-        <StoriesBoard stories={filtered} onOpen={setOpen} onMove={move} />
+        <StoriesBoard stories={filtered} onOpen={setOpen} onMove={(s, to) => void move(s, to)} />
       ) : (
         <div className="overflow-hidden rounded-lg border">
           <Table>
@@ -155,13 +177,13 @@ export function StoriesView() {
                   className="cursor-pointer"
                 >
                   <TableCell className="max-w-md">
-                    <p className="font-medium">{s.title}</p>
+                    <p className="truncate font-medium">{s.title}</p>
                     <p className="truncate text-xs text-muted-foreground">{s.hook}</p>
                   </TableCell>
                   <TableCell><StoryStatusBadge status={s.status} /></TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{s.series}</TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{s.format}</TableCell>
-                  <TableCell><ScoreBar value={totalScore(s.scores)} /></TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{s.series ?? "—"}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{s.format ?? "—"}</TableCell>
+                  <TableCell>{s.total_score !== null ? <ScoreBar value={s.total_score} /> : "—"}</TableCell>
                   <TableCell className="font-mono text-xs">{s.gap_score ?? "—"}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">{timeAgo(s.updated_at)}</TableCell>
                 </TableRow>
@@ -171,7 +193,7 @@ export function StoriesView() {
         </div>
       )}
 
-      <StoryDrawer story={openStory} onOpenChange={(open) => !open && setOpen(null)} onMove={move} />
+      <StoryDrawer storyId={openId} onOpenChange={(open) => !open && setOpen(null)} onMove={(s, to) => void move(s, to)} />
     </div>
   )
 }

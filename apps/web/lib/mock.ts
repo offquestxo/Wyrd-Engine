@@ -11,111 +11,11 @@ import type {
   Dossier,
   OutlierVideo,
   Plan,
-  Story,
-  StorySource,
   UsageMeter,
 } from "./types"
 
 const NOW = Date.now()
 const ago = (minutes: number) => new Date(NOW - minutes * 60_000).toISOString()
-
-const cc = (n: number): StorySource[] =>
-  [
-    {
-      id: 1,
-      url: "https://en.wikipedia.org/wiki/Circuit_City",
-      title: "Circuit City — Wikipedia",
-      source_type: "secondary" as const,
-      excerpt: "founded in 1949 by Samuel Wurtzel as the Wards Company",
-    },
-    {
-      id: 2,
-      url: "https://www.sec.gov/Archives/edgar/data/104599/000119312508093063/d10k.htm",
-      title: "Form 10-K, fiscal year ended Feb 29, 2008 (SEC EDGAR)",
-      source_type: "primary" as const,
-    },
-    {
-      id: 3,
-      url: "https://www.sec.gov/Archives/edgar/data/104599/000010459909000027/ex99-1.htm",
-      title: "8-K Ex. 99.1 — April 2009 monthly operating report (SEC EDGAR)",
-      source_type: "primary" as const,
-    },
-  ].slice(0, n)
-
-function story(
-  id: number,
-  title: string,
-  company: string,
-  status: Story["status"],
-  series: Story["series"],
-  format: Story["format"],
-  hook: string,
-  s: [number, number, number, number, number, number],
-  extra: Partial<Story> = {},
-): Story {
-  return {
-    id,
-    slug: title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, ""),
-    title,
-    company,
-    status,
-    series,
-    format,
-    hook,
-    scores: {
-      drama: s[0],
-      twist: s[1],
-      relatability: s[2],
-      visual_potential: s[3],
-      hook_number: s[4],
-      freshness: s[5],
-    },
-    gap_score: null,
-    from_outlier: false,
-    sources: [],
-    dossier_versions: [],
-    created_at: ago(60 * 24 * (id + 1)),
-    updated_at: ago(37 * id),
-    ...extra,
-  }
-}
-
-export const MOCK_STORIES: Story[] = [
-  story(1, "Circuit City", "Circuit City Stores, Inc.", "Researching", "Recent Collapses", "Long",
-    "Sample hook: the electronics giant whose last chapter is an 8-K.", [8, 9, 9, 8, 7, 6],
-    { gap_score: 7.8, sources: cc(3), dossier_versions: [1, 2] }),
-  story(2, "Blockbuster", "Blockbuster LLC", "Shortlisted", "Childhood Brands", "Long",
-    "Sample hook: every Friday night of your childhood, gone.", [8, 7, 10, 9, 7, 3]),
-  story(3, "Theranos", "Theranos, Inc.", "Archived", "Fraud Files", "Long",
-    "Sample hook: the blood test that never worked.", [10, 8, 7, 7, 8, 2]),
-  story(4, "Quibi", "Quibi Holdings", "Inbox", "Tech Graveyard", "Short",
-    "Sample hook: a streaming app for phones that nobody opened.", [7, 6, 8, 7, 9, 6],
-    { gap_score: 6.4 }),
-  story(5, "Toys \"R\" Us", "Toys \"R\" Us, Inc.", "Inbox", "Childhood Brands", "Long",
-    "Sample hook: Geoffrey the giraffe never saw the buyout coming.", [8, 8, 10, 9, 8, 5],
-    { gap_score: 7.1 }),
-  story(6, "MoviePass", "MoviePass Inc.", "Scripting", "Tech Graveyard", "Short",
-    "Sample hook: unlimited movies for less than one ticket. What could go wrong?", [9, 8, 9, 7, 9, 5]),
-  story(7, "Pets.com", "Pets.com", "Inbox", "Tech Graveyard", "Short",
-    "Sample hook: the sock puppet that outlived the company.", [6, 6, 6, 8, 6, 6],
-    { from_outlier: true }),
-  story(8, "Enron", "Enron Corporation", "Archived", "Fraud Files", "Long",
-    "Sample hook: the company that invented its own profits.", [10, 9, 6, 6, 8, 2]),
-  story(9, "Kodak", "Eastman Kodak", "Inbox", "Comebacks", "Long",
-    "Sample hook: it invented the digital camera, then buried it.", [7, 9, 8, 8, 6, 4],
-    { gap_score: 5.9 }),
-  story(10, "Crocs", "Crocs, Inc.", "Shortlisted", "Comebacks", "Short",
-    "Sample hook: the ugliest shoe in America became cool on purpose.", [6, 8, 9, 9, 6, 7]),
-  story(11, "Post-it Notes", "3M", "Inbox", "Everyday Genius", "Short",
-    "Sample hook: a glue that failed became a desk essential.", [5, 8, 9, 7, 5, 6],
-    { from_outlier: true }),
-  story(12, "FTX", "FTX Trading Ltd.", "Fact-check", "Fraud Files", "Long",
-    "Sample hook: the exchange that held everything except the money.", [10, 9, 8, 7, 9, 3]),
-  story(13, "Vine", "Vine Labs", "Published", "Tech Graveyard", "Short",
-    "Sample hook: six seconds that changed the internet.", [6, 6, 9, 8, 6, 5]),
-  story(14, "Sears", "Sears, Roebuck and Co.", "Recording", "Recent Collapses", "Long",
-    "Sample hook: the Amazon of 1900 that forgot how to sell.", [8, 8, 8, 8, 7, 5]),
-]
 
 const log = (minutesAgo: number, message: string, level: "info" | "warn" | "error" = "info") => ({
   ts: ago(minutesAgo),

@@ -16,7 +16,11 @@ import {
   CommandShortcut,
 } from "@/components/ui/command"
 import { api } from "@/lib/api"
-import { MOCK_STORIES } from "@/lib/mock"
+import useSWR from "swr"
+
+import { useProposePlan } from "@/components/plans/propose-provider"
+import { fetcher } from "@/lib/api"
+import type { Story } from "@/lib/types"
 import { AGENT_INFO, NAV } from "@/lib/nav"
 
 export function CommandPalette({
@@ -29,6 +33,8 @@ export function CommandPalette({
   onTogglePanel: () => void
 }) {
   const router = useRouter()
+  const propose = useProposePlan()
+  const { data: stories } = useSWR<Story[]>(open ? "/api/stories" : null, fetcher)
   const run = (fn: () => void) => {
     onOpenChange(false)
     fn()
@@ -55,7 +61,13 @@ export function CommandPalette({
             <CommandItem
               key={agent.name}
               value={`run ${agent.name} ${agent.description}`}
-              onSelect={() => run(() => router.push(`/chat?compose=${encodeURIComponent(`@${agent.name} `)}`))}
+              onSelect={() =>
+                run(() =>
+                  agent.name === "scout"
+                    ? void propose("scout", { mode: "both", limit: 25 }, "Find up to 25 story leads (news + evergreen)")
+                    : router.push(`/chat?compose=${encodeURIComponent(`@${agent.name} `)}`),
+                )
+              }
             >
               <PlayIcon />
               <span className="font-mono text-brand">@{agent.name}</span>
@@ -64,11 +76,11 @@ export function CommandPalette({
           ))}
         </CommandGroup>
         <CommandSeparator />
-        <CommandGroup heading="Stories (sample)">
-          {MOCK_STORIES.map((story) => (
+        <CommandGroup heading="Stories">
+          {(stories ?? []).slice(0, 200).map((story) => (
             <CommandItem
               key={story.id}
-              value={`story ${story.title} ${story.company} ${story.series}`}
+              value={`story ${story.id} ${story.title} ${story.company ?? ""} ${story.series ?? ""}`}
               onSelect={() => run(() => router.push(`/stories?story=${story.id}`))}
             >
               <span>{story.title}</span>
