@@ -19,7 +19,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from functools import lru_cache
-from typing import Any, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from pydantic import BaseModel, ValidationError
 
@@ -47,6 +47,9 @@ from apps.api.providers.schemas import (
 from apps.api.providers.usage import UsageLog
 from apps.api.runctx import log_once_to_current_run, log_to_current_run
 
+if TYPE_CHECKING:
+    from apps.api.providers.parallel import ParallelScorer
+
 log = logging.getLogger("wyrd.router")
 
 # True while a call runs on a fallback provider (not the route's first usable one).
@@ -65,9 +68,11 @@ class InvalidOutputError(ProviderError):
 
 
 class AllProvidersFailed(ProviderError):
-    def __init__(self, task: str, errors: list[str]) -> None:
+    def __init__(self, task: str, errors: list[str], block: bool = False) -> None:
         super().__init__(
-            "router", f"all providers failed for {task}: {'; '.join(errors) or 'none configured'}"
+            "router",
+            f"all providers failed for {task}: {'; '.join(errors) or 'none configured'}",
+            block=block,
         )
         self.task = task
         self.errors = errors
@@ -267,11 +272,17 @@ class Router:
         return delay
 
     async def _run(
-        self, task: str, call: Callable[[str, LLMProvider, ModelConfig, bool], Awaitable[T]]
+        self,
+        task: str,
+        call: Callable[[str, LLMProvider, ModelConfig, bool], Awaitable[T]],
+        route: list[RouteStep] | None = None,
     ) -> T:
-        """Try each provider in the route with retries; return the first success."""
+        """Try each provider in the route with retries; return the first success.
+
+        `route` overrides the configured route (the parallel scorer pins one provider)."""
         errors: list[str] = []
-        steps = self._route(task)
+        blocks: list[bool] = []  # per failed provider: was it a block (bad key / zero quota)?
+        steps = route if route is not None else self._route(task)
         for index, step in enumerate(steps):
             provider = self.providers[step.provider]
             model = self.config.model(step.provider, step.model)
@@ -286,12 +297,15 @@ class Router:
                     result = await call(step.provider, provider, model, json_mode)
                 except MissingKeyError as e:
                     errors.append(str(e))
+                    blocks.append(True)
                     break
                 except InvalidOutputError as e:
                     errors.append(str(e))
+                    blocks.append(False)
                     break
                 except ProviderError as e:
                     errors.append(str(e))
+                    blocks.append(e.block)
                     if e.block:
                         self._auth_failed_at[step.provider] = self._clock()
                         self._auth_errors[step.provider] = str(e)
@@ -312,7 +326,7 @@ class Router:
                     )
                 return result
         self._event(task, "failed", "router", "; ".join(errors) or "no providers configured")
-        raise AllProvidersFailed(task, errors)
+        raise AllProvidersFailed(task, errors, block=bool(blocks) and all(blocks))
 
     async def _chat_logged(
         self,
@@ -359,6 +373,7 @@ class Router:
         payload: Any,
         out: type[M],
         prompt_vars: dict[str, str] | None = None,
+        route: list[RouteStep] | None = None,
     ) -> M:
         schema = out.model_json_schema()
         schema_text = json.dumps(schema)
@@ -399,7 +414,7 @@ class Router:
             except (ValueError, ValidationError) as e:
                 raise InvalidOutputError(name, f"invalid JSON after repair: {str(e)[:200]}") from e
 
-        return await self._run(task, call)
+        return await self._run(task, call, route=route)
 
     # ------------------------------------------------------------------ tasks
     def _score_batches(self, items: Sequence[ItemToScore]) -> list[list[ItemToScore]]:
@@ -634,3 +649,11 @@ async def second_opinion(dossier_markdown: str) -> SecondOpinion:
 
 async def embed(texts: Sequence[str]) -> EmbedResult:
     return await get_router().embed(texts)
+
+
+def parallel_scorer(router: Router | None = None) -> ParallelScorer:
+    from apps.api.config import ParallelConfig
+    from apps.api.providers.parallel import ParallelScorer
+
+    r = router or get_router()
+    return ParallelScorer(r, r.config.parallel.get("score_items", ParallelConfig()))

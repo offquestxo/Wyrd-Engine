@@ -79,3 +79,13 @@ class UsageLog:
             if limit
         ]
         return max(ratios, default=0.0)
+
+    def recent(self, provider: str, model: str, since: datetime) -> list[tuple[datetime, int]]:
+        """(timestamp, tokens) of each call since a time — seeds per-minute rate limiters."""
+        stmt = select(ProviderUsage.ts, ProviderUsage.tokens_in, ProviderUsage.tokens_out).where(
+            ProviderUsage.provider == provider,
+            ProviderUsage.model == model,
+            col(ProviderUsage.ts) >= since,
+        )
+        with Session(self._engine) as s:
+            return [(ts, int(a) + int(b)) for ts, a, b in s.exec(stmt).all()]
