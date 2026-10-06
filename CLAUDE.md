@@ -74,10 +74,10 @@ You are building and maintaining the wyrd.exe story engine: a local app that fin
   20 search calls / 40 units). Mistral account has 0 req/min quota → blocked until the owner fixes it.
 - Parallel scoring across providers (75 items in 47 s), pre-filter, unverified-lead badges, v2 roadmap
   in SPEC §13 — done.
-- Phase 4 (@outlier): **done**, awaiting review. 3 seed channels scanned live (12 outliers, all analysed;
+- Phase 4 (@outlier): **done**, reviewed and pushed. 3 seed channels scanned live (12 outliers, all analysed;
   9 + 7 units, matching estimates). Company Man handle corrected to @companyman114.
-- Phase 5 (orchestrator + chat): **done**, awaiting review (not pushed). MCP server at `/mcp` (FastMCP,
+- Phase 5 (orchestrator + chat): **done**, reviewed and pushed (372eb89). MCP server at `/mcp` (FastMCP,
   token-guarded), `claude -p` stream-json turns with one resumed session per chat and an MCP-only
   allowlist, @mention fast path (no Claude), plan + result cards, results fed back to the orchestrator,
   hybrid memory search, Claude meter with soft cap. Browser calls the API through Next's `/api` proxy.
-- Next: Phase 6 (@researcher) after "proceed".
+- Phase 6 (@researcher): **in progress** (docs/phase6-progress.md).
