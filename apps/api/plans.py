@@ -59,6 +59,13 @@ def validate_step(step: StepIn) -> dict[str, Any]:
         raise PlanError(f"@{step.agent} {where}: {first['msg']}") from e
 
 
+def _safe_estimate(agent: str, params: dict[str, Any]) -> dict[str, Any] | None:
+    try:
+        return AGENTS[agent].estimate_for(params)
+    except Exception:  # an estimate must never break showing a plan
+        return None
+
+
 class PlanService:
     def __init__(self, engine: Engine, bus: EventBus, runner: JobRunner) -> None:
         self.engine = engine
@@ -90,6 +97,7 @@ class PlanService:
                     **step.model_dump(mode="json"),
                     "uses_claude": AGENTS[step.agent].uses_claude,
                     "uses_youtube_quota": AGENTS[step.agent].uses_youtube_quota,
+                    "estimate": _safe_estimate(step.agent, step.params or {}),
                 }
                 for step in steps
             ],

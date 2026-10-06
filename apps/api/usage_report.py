@@ -181,3 +181,14 @@ def _claude_meter(s: Session, since: datetime, providers: ProvidersConfig) -> di
         "fallbacks": 0,
         "models": [],
     }
+
+
+def youtube_used_today(
+    engine: Engine, engine_cfg: EngineConfig, now: datetime | None = None
+) -> tuple[int, int]:
+    """(units, search.list calls) used since today's quota reset."""
+    since = day_start(engine_cfg.usage.day_reset_timezone, now)
+    with Session(engine) as s:
+        day = _aggregate(s, since, "youtube")
+    units = sum(v["units"] for v in day.values())
+    return units, day.get("search", {}).get("requests", 0)

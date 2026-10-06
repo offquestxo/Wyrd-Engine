@@ -32,6 +32,7 @@ class AgentInfo(BaseModel):
     runner: str | None = None  # "module:function"; None until the agent is built
     arrives_in: str | None = None  # phase that implements it, for helpful errors
     params_model: type[BaseModel] | None = None
+    estimate: str | None = None  # "module:function(params) -> dict" for plan-card estimates
 
     def load_runner(self) -> AgentFn:
         if not self.runner:
@@ -40,8 +41,15 @@ class AgentInfo(BaseModel):
         fn: AgentFn = getattr(importlib.import_module(module), func)
         return fn
 
+    def estimate_for(self, params: dict[str, Any]) -> dict[str, Any] | None:
+        if not self.estimate:
+            return None
+        module, _, func = self.estimate.partition(":")
+        result: dict[str, Any] = getattr(importlib.import_module(module), func)(params)
+        return result
+
     def public(self) -> dict[str, Any]:
-        return self.model_dump(exclude={"runner", "params_model"}) | {
+        return self.model_dump(exclude={"runner", "params_model", "estimate"}) | {
             "implemented": self.runner is not None
         }
 
@@ -52,7 +60,8 @@ AGENTS: dict[str, AgentInfo] = {
         description="Finds and scores new story leads (news + evergreen gaps)",
         uses_claude=False,
         uses_youtube_quota=True,
-        arrives_in="Phase 3",
+        runner="apps.api.agents.scout:run",
+        estimate="apps.api.agents.scout:estimate",
         params_model=ScoutParams,
     ),
     "outlier": AgentInfo(
