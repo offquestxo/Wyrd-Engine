@@ -223,3 +223,85 @@ export interface EngineEvent {
   ts: string
   data: Record<string, unknown>
 }
+
+// --- Phase 2: real runs, plans, usage ----------------------------------------
+export interface RunLogEntry {
+  id: number
+  run_id: number
+  ts: string
+  level: "debug" | "info" | "warn" | "error"
+  message: string
+  data: Record<string, unknown> | null
+}
+
+export interface RunRecord {
+  id: number
+  agent: string
+  params: Record<string, unknown> | null
+  status: RunStatus
+  started_at: string | null
+  finished_at: string | null
+  created_at: string | null
+  current_step: string | null
+  progress: number | null
+  result: Record<string, unknown> | null
+  error: string | null
+  plan_id: number | null
+  log_tail?: RunLogEntry[]
+  logs?: RunLogEntry[]
+}
+
+export interface PlanStepRecord {
+  id: number
+  order: number
+  agent: string
+  params: Record<string, unknown> | null
+  status: string
+  run_id: number | null
+  uses_claude: boolean
+  uses_youtube_quota: boolean
+}
+
+export interface PlanRecord {
+  id: number
+  chat_id: number | null
+  status: "pending" | "approved" | "cancelled" | "done" | "failed"
+  summary: string | null
+  created_at: string
+  decided_at: string | null
+  steps: PlanStepRecord[]
+}
+
+export interface ModelUsage {
+  alias: string
+  id: string
+  requests: number
+  tokens: number
+  errors: number
+  fallbacks: number
+  requests_last_min: number
+  tokens_last_min: number
+  limits: { rpm: number | null; rpd: number | null; tpm: number | null; tpd: number | null }
+}
+
+export interface ProviderMeter {
+  provider: string
+  label: string
+  status: string
+  used: number
+  limit: number | null
+  unit: string
+  requests: number
+  tokens: number
+  errors: number
+  fallbacks: number
+  search_calls?: number
+  search_limit?: number | null
+  models: ModelUsage[]
+}
+
+export interface UsageReport {
+  since: string
+  timezone: string
+  meters: ProviderMeter[]
+}

@@ -1,55 +1,77 @@
 "use client"
 
-import { ActivityIcon, ArrowRightIcon, CheckCircle2Icon, ClipboardListIcon, GaugeIcon } from "lucide-react"
-import Link from "next/link"
-import { useEffect, useState } from "react"
+import { ActivityIcon, ArrowRightIcon, ClipboardListIcon, GaugeIcon } from "lucide-react"
+import { useState } from "react"
 
-import { AgentTag, RunStatusBadge } from "@/components/common/badges"
 import { PageHeader } from "@/components/common/page-header"
 import { EmptyState, ErrorState, LoadingState } from "@/components/common/states"
+import { PlanDialog, TestRunButton } from "@/components/plans/test-run-dialog"
+import { RunRow } from "@/components/runs/run-row"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { useDemo } from "@/hooks/use-demo"
-import { clock, duration, formatNumber, timeAgo } from "@/lib/format"
-import { MOCK_PLAN, MOCK_RUNS, MOCK_USAGE } from "@/lib/mock"
-import type { AgentRun, UsageMeter } from "@/lib/types"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { usePlans, useRuns, useUsage } from "@/hooks/use-live"
+import { formatNumber } from "@/lib/format"
+import type { PlanRecord, ProviderMeter } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
 export function HomeView() {
-  const runs = useDemo(MOCK_RUNS, [])
-  const usage = useDemo(MOCK_USAGE, [])
-  const plans = useDemo([MOCK_PLAN], [])
+  const runs = useRuns("limit=12")
+  const usage = useUsage()
+  const pending = usePlans("pending")
+  const [reviewing, setReviewing] = useState<PlanRecord | null>(null)
 
   return (
     <div className="mx-auto max-w-6xl px-8 py-8">
-      <PageHeader title="Home" description="What the agents are doing and how much quota is left today." sample />
+      <PageHeader
+        title="Home"
+        description="What the agents are doing and how much quota is left today."
+        actions={<TestRunButton />}
+      />
 
-      {plans.data && plans.data.length > 0 && (
-        <Link
-          href="/chat"
-          className="mb-6 flex items-center gap-3 rounded-lg border border-brand/30 bg-brand-muted px-4 py-3 text-sm transition-colors hover:border-brand/50"
-        >
-          <ClipboardListIcon className="size-4 text-brand" />
-          <span className="flex-1">
-            <span className="font-medium">{plans.data.length} plan waiting for approval</span>
-            <span className="text-muted-foreground"> · {plans.data[0].summary}</span>
-          </span>
-          <span className="flex items-center gap-1 text-xs text-brand">
-            Review <ArrowRightIcon className="size-3" />
-          </span>
-        </Link>
+      {pending.data && pending.data.length > 0 && (
+        <div className="mb-6 overflow-hidden rounded-lg border border-brand/30 bg-brand-muted">
+          {pending.data.slice(0, 3).map((plan) => (
+            <button
+              key={plan.id}
+              onClick={() => setReviewing(plan)}
+              className="flex w-full items-center gap-3 border-b border-brand/20 px-4 py-3 text-left text-sm transition-colors last:border-b-0 hover:bg-brand/10"
+            >
+              <ClipboardListIcon className="size-4 text-brand" />
+              <span className="flex-1 truncate">
+                <span className="font-medium">Plan #{plan.id} waiting for approval</span>
+                <span className="text-muted-foreground"> · {plan.summary}</span>
+              </span>
+              <span className="flex items-center gap-1 text-xs text-brand">
+                Review <ArrowRightIcon className="size-3" />
+              </span>
+            </button>
+          ))}
+          {pending.data.length > 3 && (
+            <p className="px-4 py-2 text-xs text-muted-foreground">+{pending.data.length - 3} more pending</p>
+          )}
+        </div>
       )}
+      <PlanDialog
+        plan={reviewing}
+        onOpenChange={(open) => !open && setReviewing(null)}
+        onChange={(plan) => {
+          setReviewing(plan)
+          void pending.mutate()
+        }}
+      />
 
       <section className="mb-8">
         <SectionTitle icon={ActivityIcon}>Live agent activity</SectionTitle>
         {runs.isLoading ? (
           <LoadingState rows={4} />
         ) : runs.error ? (
-          <ErrorState error={runs.error} onRetry={runs.retry} />
+          <ErrorState error={runs.error as Error} onRetry={() => void runs.mutate()} />
         ) : !runs.data?.length ? (
           <EmptyState
             icon={ActivityIcon}
             title="No runs yet"
-            description="Approve a plan in Chat or press ⌘K to start @scout, @outlier, or @researcher."
+            description="Approve a plan to start an agent. Try “Test run” to watch the pipeline work."
+            action={<TestRunButton />}
           />
         ) : (
           <div className="overflow-hidden rounded-lg border">
@@ -61,20 +83,28 @@ export function HomeView() {
       </section>
 
       <section>
-        <SectionTitle icon={GaugeIcon}>API usage today</SectionTitle>
+        <SectionTitle icon={GaugeIcon}>
+          API usage today
+          {usage.data && (
+            <span className="font-normal text-muted-foreground/70">
+              {" "}
+              · since midnight {usage.data.timezone.split("/").pop()?.replace("_", " ")}
+            </span>
+          )}
+        </SectionTitle>
         {usage.isLoading ? (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-            {Array.from({ length: 5 }, (_, i) => (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {Array.from({ length: 4 }, (_, i) => (
               <LoadingState key={i} rows={1} className="[&>*]:h-32" />
             ))}
           </div>
         ) : usage.error ? (
-          <ErrorState error={usage.error} onRetry={usage.retry} />
-        ) : !usage.data?.length ? (
-          <EmptyState icon={GaugeIcon} title="No provider calls today" description="Meters fill in as agents call providers." />
+          <ErrorState error={usage.error as Error} onRetry={() => void usage.mutate()} />
+        ) : !usage.data?.meters.length ? (
+          <EmptyState icon={GaugeIcon} title="No providers configured" />
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-            {usage.data.map((meter) => (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {usage.data.meters.map((meter) => (
               <MeterCard key={meter.provider} meter={meter} />
             ))}
           </div>
@@ -92,66 +122,27 @@ function SectionTitle({ icon: Icon, children }: { icon: typeof ActivityIcon; chi
   )
 }
 
-function useNow(intervalMs = 1000) {
-  const [now, setNow] = useState(() => Date.now())
-  useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), intervalMs)
-    return () => clearInterval(t)
-  }, [intervalMs])
-  return now
+const STATUS_DOT: Record<string, string> = {
+  set: "bg-success",
+  failing: "bg-destructive",
+  missing: "bg-muted-foreground/40",
 }
 
-function RunRow({ run }: { run: AgentRun }) {
-  const now = useNow()
-  const tail = run.logs.slice(-2)
-  return (
-    <Link
-      href={`/runs/${run.id}`}
-      className="grid grid-cols-[110px_1fr_auto] items-start gap-4 border-b px-4 py-3 transition-colors last:border-b-0 hover:bg-muted/40"
-    >
-      <div className="space-y-1.5">
-        <AgentTag agent={run.agent} />
-        <RunStatusBadge status={run.status} />
-      </div>
-      <div className="min-w-0">
-        <p className="truncate text-sm">
-          {run.status === "running" ? run.current_step : run.error ?? run.summary}
-        </p>
-        <div className="mt-1.5 space-y-0.5 font-mono text-[11px] text-muted-foreground">
-          {tail.map((log, i) => (
-            <p key={i} className={cn("truncate", log.level === "error" && "text-destructive", log.level === "warn" && "text-warning")}>
-              <span className="text-muted-foreground/50">{clock(log.ts)}</span> {log.message}
-            </p>
-          ))}
-        </div>
-      </div>
-      <div className="text-right font-mono text-xs text-muted-foreground">
-        <p>#{run.id}</p>
-        <p className="mt-1.5">
-          {run.started_at
-            ? run.status === "running"
-              ? duration(run.started_at, null, now)
-              : timeAgo(run.finished_at ?? run.started_at, now)
-            : "queued"}
-        </p>
-      </div>
-    </Link>
-  )
-}
-
-function MeterCard({ meter }: { meter: UsageMeter }) {
+function MeterCard({ meter }: { meter: ProviderMeter }) {
   const pct = meter.limit ? Math.min(100, (meter.used / meter.limit) * 100) : null
   const tone = pct === null ? "bg-info" : pct >= 80 ? "bg-destructive" : pct >= 60 ? "bg-warning" : "bg-brand"
+  const statusLabel = meter.status === "missing" ? "No key" : meter.status === "failing" ? "Key failing" : "Connected"
   return (
-    <Card className="gap-3 py-4">
+    <Card className={cn("gap-3 py-4", meter.status === "missing" && "opacity-60")}>
       <CardHeader className="px-4">
         <CardTitle className="flex items-center justify-between text-sm">
           {meter.label}
-          {meter.errors > 0 && meter.calls === meter.errors ? (
-            <span className="size-1.5 rounded-full bg-destructive" title="All calls failing" />
-          ) : (
-            <CheckCircle2Icon className="size-3.5 text-success" />
-          )}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className={cn("size-1.5 rounded-full", STATUS_DOT[meter.status] ?? "bg-success")} />
+            </TooltipTrigger>
+            <TooltipContent>{statusLabel}</TooltipContent>
+          </Tooltip>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-2 px-4">
@@ -163,12 +154,34 @@ function MeterCard({ meter }: { meter: UsageMeter }) {
           </span>
         </p>
         <div className="h-1 overflow-hidden rounded-full bg-muted">
-          <div className={cn("h-full rounded-full", tone)} style={{ width: `${pct ?? 100}%`, opacity: pct === null ? 0.3 : 1 }} />
+          <div
+            className={cn("h-full rounded-full transition-all", tone)}
+            style={{ width: `${pct ?? 100}%`, opacity: pct === null ? 0.25 : 1 }}
+          />
         </div>
         <p className="font-mono text-[10px] text-muted-foreground">
-          {meter.errors} err · {meter.fallbacks} fallback
+          {formatNumber(meter.requests)} calls · {meter.errors} err · {meter.fallbacks} fallback
         </p>
-        {meter.note && <p className="text-[11px] leading-4 text-muted-foreground">{meter.note}</p>}
+        {meter.search_limit ? (
+          <p className="font-mono text-[10px] text-muted-foreground">
+            search {meter.search_calls ?? 0} / {meter.search_limit} calls
+          </p>
+        ) : null}
+        {meter.models.some((m) => m.requests > 0) && (
+          <ul className="space-y-0.5 border-t pt-2 font-mono text-[10px] text-muted-foreground">
+            {meter.models
+              .filter((m) => m.requests > 0)
+              .map((m) => (
+                <li key={m.alias} className="flex justify-between gap-2">
+                  <span className="truncate">{m.alias}</span>
+                  <span>
+                    {m.requests}
+                    {m.limits.rpd ? `/${formatNumber(m.limits.rpd)}` : ""} · {formatNumber(m.tokens)} tok
+                  </span>
+                </li>
+              ))}
+          </ul>
+        )}
       </CardContent>
     </Card>
   )
