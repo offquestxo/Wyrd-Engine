@@ -23,9 +23,9 @@ Resume note in case a session hits the usage limit.
 
 ## Checkpoints
 - [x] Pushed Phase 5 (372eb89); CLAUDE.md status; offline MCP-restart tests (760e3cd)
-- [ ] Config + router headroom ordering
-- [ ] research/ (texts, checks, render, export, save) + tests
-- [ ] MCP researcher tools + tests
+- [x] Config + router headroom ordering (840f98f)
+- [x] research/ (texts, checks, render, export, save) + tests
+- [x] MCP researcher tools + tests (separate /mcp-research endpoint)
 - [ ] researcher runner + agent def + prompt + tests
 - [ ] Frontend: Research page, Research this, plan card estimate
 - [ ] Live: one standard Circuit City run

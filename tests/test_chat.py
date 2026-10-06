@@ -206,14 +206,21 @@ async def test_mention_falls_back_to_orchestrator(svc: Any, parsed: Any) -> None
     assert user["metadata"]["fast_path"] is False and user["metadata"]["fallback_reason"]
 
 
-async def test_researcher_mention_says_not_built(svc: Any) -> None:
+async def test_researcher_mention_makes_plan_card_with_claude_budget(svc: Any) -> None:
     service, _, claude, router, _ = svc
+    router.mention = MentionParse(
+        agent="researcher", params={"topic": "Circuit City", "depth": "standard"}, confident=True
+    )
     chat = service.create()
     await service.send(chat["id"], "@researcher Circuit City")
     await service.drain()
-    assert claude.calls == [] and router.mention_calls == 0
-    notice = service.get(chat["id"])["messages"][-1]
-    assert notice["role"] == "system" and "Phase 6" in notice["content"]
+    assert claude.calls == [] and router.mention_calls == 1  # planning it costs no Claude call
+    view = service.get(chat["id"])
+    plan = next(iter(view["plans"].values()))
+    step = plan["steps"][0]
+    assert step["agent"] == "researcher" and step["uses_claude"] is True
+    assert step["estimate"]["claude_turns"] == 40 and "edgar" in step["estimate"]["sources"]
+    assert step["providers"][-1] == "claude"
 
 
 # ---------------------------------------------------------------------------- orchestrator turns
@@ -370,7 +377,7 @@ def test_agents_brief_lists_params_and_hides_internal_agents() -> None:
     brief = mcp_server.agents_brief()
     assert "@scout" in brief and "limit" in brief and "@outlier" in brief
     assert "story_update" not in brief and "@demo" not in brief
-    assert "@researcher" in brief and "not built yet" in brief
+    assert "@researcher" in brief and "depth" in brief and "not built yet" not in brief
 
 
 async def test_token_guard_rejects_unknown_callers() -> None:

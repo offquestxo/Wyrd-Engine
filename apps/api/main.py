@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import shutil
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, Header, HTTPException
@@ -27,6 +29,7 @@ from apps.api.jobs import JobRunner
 from apps.api.plans import PlanError, PlanIn, PlanService
 from apps.api.providers.base import ConnectionTest
 from apps.api.providers.router import gemini_uses_oauth, get_router
+from apps.api.research import dossier as dossier_mod
 from apps.api.settings import get_settings, mask_secret
 from apps.api.settings_store import auto_approve_key, get_setting, set_setting
 from apps.api.sources import youtube
@@ -410,6 +413,35 @@ async def update_story_endpoint(story_id: int, patch: stories.StoryPatch) -> dic
         raise HTTPException(404, f"no story {story_id}")
     bus.publish("story.changed", story_id=story_id, status=story["status"])
     return story
+
+
+# ---------------------------------------------------------------------------- dossiers
+@app.get("/api/dossiers")
+async def list_dossiers_endpoint() -> list[dict[str, Any]]:
+    return dossier_mod.list_dossiers(get_engine())
+
+
+@app.get("/api/dossiers/{story_id}")
+async def get_dossier_endpoint(story_id: int, version: int | None = None) -> dict[str, Any]:
+    dossier = dossier_mod.get_dossier(get_engine(), story_id, version)
+    if dossier is None:
+        raise HTTPException(404, f"no dossier for story {story_id}")
+    return dossier
+
+
+@app.post("/api/dossiers/{story_id}/open")
+async def open_dossier_file(story_id: int) -> dict[str, Any]:
+    """Reveal the exported dossier.md on this machine (Finder on macOS)."""
+    dossier = dossier_mod.get_dossier(get_engine(), story_id)
+    path = Path(dossier["export_path"]) if dossier and dossier.get("export_path") else None
+    if path is None or not path.exists():
+        raise HTTPException(404, "no exported file for this dossier")
+    opener = shutil.which("open") or shutil.which("xdg-open")
+    if opener is None:
+        raise HTTPException(501, f"can't open files on this system; the file is at {path}")
+    args = [opener, "-R", str(path)] if opener.endswith("/open") else [opener, str(path.parent)]
+    await asyncio.create_subprocess_exec(*args)
+    return {"ok": True, "path": str(path)}
 
 
 # ---------------------------------------------------------------------------- outliers

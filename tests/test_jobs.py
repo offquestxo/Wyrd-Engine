@@ -154,10 +154,8 @@ async def test_approve_with_edited_params(engine: Any, stack: Any) -> None:
 
 async def test_plan_validation(stack: Any) -> None:
     _, plans, _ = stack
-    with pytest.raises(PlanError, match="isn't built yet"):
-        await plans.create(
-            PlanIn(summary="t", steps=[StepIn(agent="researcher", params={"topic": "x"})])
-        )
+    with pytest.raises(PlanError, match="story_id or topic"):
+        await plans.create(PlanIn(summary="t", steps=[StepIn(agent="researcher", params={})]))
     with pytest.raises(PlanError, match="unknown agent"):
         await plans.create(PlanIn(summary="t", steps=[StepIn(agent="factcheck")]))
     with pytest.raises(PlanError, match="steps"):

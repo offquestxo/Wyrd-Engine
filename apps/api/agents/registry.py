@@ -86,8 +86,9 @@ AGENTS: dict[str, AgentInfo] = {
         name="researcher",
         description="Builds a sourced research dossier for a story",
         uses_claude=True,
-        uses_youtube_quota=False,
-        arrives_in="Phase 6",
+        uses_youtube_quota=False,  # only at depth=deep (shown in the plan-card estimate)
+        runner="apps.api.agents.researcher:run",
+        estimate="apps.api.agents.researcher:estimate",
         params_model=ResearcherParams,
         tasks=["extract_from_document", "second_opinion"],
     ),

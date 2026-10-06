@@ -476,7 +476,7 @@ async def save_dossier(
     except LookupError as e:
         raise ToolError(str(e)) from e
     if session is not None:
-        session.saved.append(result)
+        session.saved.append(result | {"resolutions": review["resolutions"]})
     check = result["excerpt_check"]
     _log(
         "info",
