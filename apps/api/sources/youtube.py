@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import re
+import time
 from typing import Any
 
 from pydantic import BaseModel
@@ -88,8 +89,40 @@ def _int(value: Any) -> int | None:
     return int(value) if value is not None else None
 
 
+# Quota cost per call (https://developers.google.com/youtube/v3/determine_quota_cost).
+# search.list is 1 unit but also counts toward a separate 100 calls/day cap.
+UNIT_COST = {"channels": 1, "playlistItems": 1, "videos": 1, "search": 1}
+
+
+def _record_usage(endpoint: str, ok: bool, latency_ms: int, error: str | None = None) -> None:
+    """Log quota use to provider_usage for the dashboard meter (never breaks the call)."""
+    try:
+        from apps.api.db.session import get_engine
+        from apps.api.providers.usage import UsageLog
+
+        UsageLog(get_engine()).record(
+            provider="youtube",
+            model=endpoint,
+            task=endpoint,
+            ok=ok,
+            units=UNIT_COST.get(endpoint, 1),
+            latency_ms=latency_ms,
+            error=error,
+        )
+    except Exception:  # pragma: no cover - usage logging is best-effort
+        pass
+
+
 async def _get(path: str, params: dict[str, Any]) -> Any:
-    return await get_json(SOURCE, f"{API}/{path}", params={**params, "key": _key()})
+    key = _key()
+    start = time.monotonic()
+    try:
+        data = await get_json(SOURCE, f"{API}/{path}", params={**params, "key": key})
+    except SourceError as e:
+        _record_usage(path, False, int((time.monotonic() - start) * 1000), str(e))
+        raise
+    _record_usage(path, True, int((time.monotonic() - start) * 1000))
+    return data
 
 
 async def channel(handle: str) -> ChannelInfo:

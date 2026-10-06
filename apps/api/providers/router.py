@@ -15,6 +15,7 @@ import re
 import time
 from collections import deque
 from collections.abc import Awaitable, Callable, Sequence
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from functools import lru_cache
@@ -44,8 +45,12 @@ from apps.api.providers.schemas import (
     VideoForAnalysis,
 )
 from apps.api.providers.usage import UsageLog
+from apps.api.runctx import log_to_current_run
 
 log = logging.getLogger("wyrd.router")
+
+# True while a call runs on a fallback provider (not the route's first usable one).
+_on_fallback: ContextVar[bool] = ContextVar("_on_fallback", default=False)
 
 # Token estimates used for batching/chunking (see estimate_tokens).
 SCORE_OUTPUT_TOKENS_PER_ITEM = 120
@@ -150,6 +155,13 @@ class Router:
     def _event(self, task: str, kind: str, provider: str, detail: str) -> None:
         self.events.append(RouterEvent(task, kind, provider, detail))
         log.warning("router %s %s via %s: %s", task, kind, provider, detail)
+        if kind != "skip":  # skips repeat every call; retries/fallbacks/failures matter per run
+            level = "error" if kind == "failed" else "warn"
+            log_to_current_run(
+                level,
+                f"{task}: {kind} via {provider}: {detail}",
+                {"task": task, "kind": kind, "provider": provider},
+            )
 
     def _record(
         self,
@@ -174,6 +186,7 @@ class Router:
                 tokens_in=tokens_in,
                 tokens_out=tokens_out,
                 error=error,
+                fallback=ok and _on_fallback.get(),
                 latency_ms=int((time.monotonic() - start) * 1000),
             )
         except Exception:  # usage logging must never break a call
@@ -250,6 +263,7 @@ class Router:
                 else self.config.providers[step.provider].json_mode
             )
             for attempt in range(self.config.retry.max_attempts):
+                token = _on_fallback.set(index > 0)
                 try:
                     result = await call(step.provider, provider, model, json_mode)
                 except MissingKeyError as e:
@@ -268,6 +282,8 @@ class Router:
                         await self._sleep(delay)
                         continue
                     break
+                finally:
+                    _on_fallback.reset(token)
                 if index > 0:
                     self._event(
                         task,

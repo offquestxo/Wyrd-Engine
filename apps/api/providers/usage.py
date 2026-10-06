@@ -29,8 +29,10 @@ class UsageLog:
         units: int = 0,
         latency_ms: int = 0,
         error: str | None = None,
+        fallback: bool = False,
     ) -> None:
         row = ProviderUsage(
+            fallback=fallback,
             provider=provider,
             model=model,
             task=task,
