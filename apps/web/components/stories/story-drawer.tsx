@@ -4,7 +4,7 @@ import { ArrowRightIcon, BookOpenTextIcon, ExternalLinkIcon, StarIcon } from "lu
 import Link from "next/link"
 import { toast } from "sonner"
 
-import { ScoreBar, StoryStatusBadge } from "@/components/common/badges"
+import { ScoreBar, StoryStatusBadge, UnverifiedBadge } from "@/components/common/badges"
 import { ErrorState, LoadingState } from "@/components/common/states"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -55,8 +55,14 @@ export function StoryDrawer({
             <div className="space-y-6 px-4 pb-6">
               {story.hook && (
                 <section>
-                  <p className="mb-1 text-[11px] tracking-wide text-muted-foreground uppercase">Hook</p>
+                  <div className="mb-1 flex items-center gap-2">
+                    <p className="text-[11px] tracking-wide text-muted-foreground uppercase">Hook</p>
+                    <UnverifiedBadge />
+                  </div>
                   <p className="text-sm">“{story.hook}”</p>
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    Written by @scout from the source headline. Check it against a dossier before using it.
+                  </p>
                 </section>
               )}
 
