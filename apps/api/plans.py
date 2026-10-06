@@ -16,6 +16,7 @@ from sqlalchemy import Engine
 from sqlmodel import Session, col, select
 
 from apps.api.agents.registry import AGENTS
+from apps.api.config import load_providers
 from apps.api.db.models import (
     AgentRun,
     Plan,
@@ -61,6 +62,26 @@ def validate_step(step: StepIn) -> dict[str, Any]:
         first = e.errors()[0]
         where = ".".join(str(p) for p in first["loc"]) or "params"
         raise PlanError(f"@{step.agent} {where}: {first['msg']}") from e
+
+
+def step_providers(agent: str) -> list[str]:
+    """Providers a step may use, primary first: its router tasks' routes (from
+    providers.yaml), then YouTube and Claude when it uses them."""
+    info = AGENTS[agent]
+    try:
+        routes = load_providers().tasks
+    except Exception:  # config errors must not break showing a plan
+        routes = {}
+    names: list[str] = []
+    for task in info.tasks:
+        for step in routes.get(task, []):
+            if step.provider not in names:
+                names.append(step.provider)
+    if info.uses_youtube_quota:
+        names.append("youtube")
+    if info.uses_claude:
+        names.append("claude")
+    return names
 
 
 def _safe_estimate(agent: str, params: dict[str, Any]) -> dict[str, Any] | None:
@@ -126,6 +147,7 @@ class PlanService:
                     "uses_claude": AGENTS[step.agent].uses_claude,
                     "uses_youtube_quota": AGENTS[step.agent].uses_youtube_quota,
                     "estimate": _safe_estimate(step.agent, step.params or {}),
+                    "providers": step_providers(step.agent),
                 }
                 for step in steps
             ],

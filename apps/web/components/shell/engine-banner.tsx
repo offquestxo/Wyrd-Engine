@@ -15,7 +15,7 @@ export function EngineBanner() {
   if (error) {
     return (
       <Banner icon={PlugZapIcon} tone="destructive">
-        Can&apos;t reach the engine API on 127.0.0.1:8000. Start it with <code className="font-mono">make dev</code>.
+        Can&apos;t reach the engine API (127.0.0.1:8000, via this app&apos;s /api proxy). Start it with <code className="font-mono">make dev</code>.
       </Banner>
     )
   }
@@ -23,7 +23,7 @@ export function EngineBanner() {
   if (claude && (!claude.installed || !claude.logged_in)) {
     return (
       <Banner icon={AlertTriangleIcon} tone="warning">
-        {claude.detail} The orchestrator and @researcher need it (Phase 5+).
+        {claude.detail} Chat needs it for the orchestrator; @mentions still work without it.
       </Banner>
     )
   }

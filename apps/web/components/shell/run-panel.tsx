@@ -15,7 +15,9 @@ import { cn } from "@/lib/utils"
 
 /** Collapsible right panel: active runs + the live SSE event feed (run logs, system events). */
 export function RunPanel({ onClose }: { onClose: () => void }) {
-  const { events, status, clear } = useEvents()
+  const { events: all, status, clear } = useEvents()
+  // Chat traffic has its own page; keep the feed to runs, plans and system events.
+  const events = all.filter((e) => !e.type.startsWith("chat."))
   const { data } = useRuns("status=running,queued&limit=10")
   const runs = data ?? []
   const now = useNow()

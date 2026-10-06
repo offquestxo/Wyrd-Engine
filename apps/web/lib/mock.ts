@@ -1,103 +1,13 @@
-// Sample data for the Phase 1 UI shell. Each page shows a "Sample data" badge while it
-// uses this file; Phases 2–6 replace these with real API calls.
+// Sample data still used by the Research page until @researcher lands (Phase 6). Every
+// other page uses the real API. The page shows a "Sample data" badge while it uses this file.
 //
-// Research integrity: sample hooks and scores are illustrative only. The sample dossier
-// uses only facts and URLs that were fetched live from EDGAR, Wikipedia, and Hacker News
-// during Phase 0 testing; everything else is marked as sample text.
+// Research integrity: the sample dossier uses only facts and URLs that were fetched live from
+// EDGAR, Wikipedia, and Hacker News during Phase 0 testing; everything else is marked sample.
 
-import type {
-  AgentRun,
-  ChatThread,
-  Dossier,
-  Plan,
-  UsageMeter,
-} from "./types"
+import type { Dossier } from "./types"
 
 const NOW = Date.now()
 const ago = (minutes: number) => new Date(NOW - minutes * 60_000).toISOString()
-
-const log = (minutesAgo: number, message: string, level: "info" | "warn" | "error" = "info") => ({
-  ts: ago(minutesAgo),
-  level,
-  message,
-})
-
-export const MOCK_RUNS: AgentRun[] = [
-  {
-    id: 42, agent: "researcher", params: { story_id: 1, depth: "standard" }, status: "running",
-    started_at: ago(6), finished_at: null, current_step: "Extracting key numbers from 10-K (2008)",
-    progress: 0.55, providers: ["claude", "nvidia", "gemini"],
-    logs: [
-      log(6, "Planned 5 research questions"),
-      log(5.5, "EDGAR: found 10-K filings for 2006–2008"),
-      log(4, "Wayback: 3 yearly snapshots of circuitcity.com"),
-      log(3, "gemini unavailable (401); extract_from_document fell back to nvidia", "warn"),
-      log(1, "Extracting key numbers from 10-K (2008)"),
-    ],
-  },
-  {
-    id: 41, agent: "scout", params: { mode: "news", topic: "fraud", limit: 25 }, status: "succeeded",
-    started_at: ago(48), finished_at: ago(45), providers: ["gemini:gemma", "nvidia"],
-    summary: "18 new stories (7 duplicates skipped)",
-    logs: [log(48, "Pulled 112 items from 9 feeds"), log(46, "Deduped to 25"), log(45, "Scored 25 items")],
-  },
-  {
-    id: 40, agent: "outlier", params: { channels: ["@companyman"], threshold: 3 }, status: "succeeded",
-    started_at: ago(130), finished_at: ago(127), providers: ["youtube", "nvidia"],
-    summary: "6 outliers flagged · 4 YouTube units",
-    logs: [log(130, "Resolved 1 channel"), log(128, "Fetched 50 videos"), log(127, "6 videos ≥ 3.0×")],
-  },
-  {
-    id: 39, agent: "scout", params: { mode: "evergreen", limit: 20 }, status: "failed",
-    started_at: ago(300), finished_at: ago(299), providers: ["wikipedia", "youtube"],
-    error: "YouTube search budget exhausted (100/100 calls today)",
-    logs: [log(300, "Crawled 5 categories"), log(299, "YouTube search cap reached", "error")],
-  },
-]
-
-export const MOCK_PLAN: Plan = {
-  id: 7, chat_id: 1, status: "pending", created_at: ago(2),
-  summary: "Find 10 fraud stories, then check what's working on Company Man",
-  steps: [
-    { order: 1, agent: "scout", params: { mode: "news", topic: "fraud", limit: 10, series: "Fraud Files" },
-      providers: ["groq → gemma → nvidia"], uses_claude: false },
-    { order: 2, agent: "outlier", params: { channels: ["@companyman"], videos_per_channel: 50, threshold: 3, format: "both" },
-      providers: ["youtube", "gemini → nvidia"], youtube_units: 3, uses_claude: false },
-  ],
-}
-
-export const MOCK_THREADS: ChatThread[] = [
-  {
-    id: 1, title: "Fraud stories + Company Man", updated_at: ago(2),
-    messages: [
-      { id: 1, role: "user", created_at: ago(3),
-        content: "find me 10 fraud stories and check what's working on Company Man" },
-      { id: 2, role: "assistant", created_at: ago(2),
-        content: "I'll run @scout for recent fraud news, then @outlier on Company Man's last 50 uploads. Here's the plan:",
-        plan: MOCK_PLAN },
-    ],
-  },
-  {
-    id: 2, title: "Circuit City research", updated_at: ago(50),
-    messages: [
-      { id: 3, role: "user", created_at: ago(55), content: "@researcher Circuit City, standard depth" },
-      { id: 4, role: "agent", created_at: ago(50), content: "",
-        result: { agent: "researcher", run_id: 42, headline: "Researcher is building the Circuit City dossier",
-          items: ["5 research questions planned", "3 primary sources found so far"], href: "/runs/42" } },
-    ],
-  },
-  {
-    id: 3, title: "What's in Tech Graveyard?", updated_at: ago(60 * 26),
-    messages: [
-      { id: 5, role: "user", created_at: ago(60 * 26), content: "What stories do we have in Tech Graveyard?" },
-      { id: 6, role: "assistant", created_at: ago(60 * 26),
-        content: "Four: **Quibi** (Inbox), **MoviePass** (Scripting), **Pets.com** (Inbox, from an outlier), and **Vine** (Published)." },
-      { id: 7, role: "agent", created_at: ago(60 * 25), content: "",
-        result: { agent: "scout", run_id: 41, headline: "Scout found 18 stories",
-          items: ["Sample story A — 8.4", "Sample story B — 8.1", "Sample story C — 7.9"], href: "/stories" } },
-    ],
-  },
-]
 
 const CC_DOSSIER = `# Circuit City — Research Dossier
 
@@ -157,12 +67,4 @@ export const MOCK_DOSSIERS: Dossier[] = [
     markdown: "# MoviePass — Research Dossier\n\n> **Sample dossier.** Placeholder until @researcher runs.\n\n## Summary\n*(sample)*\n",
     flags: 0, created_at: ago(60 * 30), sources: [],
   },
-]
-
-export const MOCK_USAGE: UsageMeter[] = [
-  { provider: "groq", label: "Groq", unit: "requests", used: 0, limit: 1000, calls: 0, errors: 0, fallbacks: 0, note: "No key — Gemma covers scoring" },
-  { provider: "gemini", label: "Gemini", unit: "requests", used: 3, limit: 500, calls: 3, errors: 3, fallbacks: 0, note: "Key rejected (401) — falling back to NVIDIA" },
-  { provider: "nvidia", label: "NVIDIA", unit: "requests", used: 128, limit: null, calls: 128, errors: 1, fallbacks: 9, note: "~40 requests/min" },
-  { provider: "youtube", label: "YouTube", unit: "units", used: 412, limit: 10000, calls: 38, errors: 0, fallbacks: 0, note: "Search: 12 / 100 calls" },
-  { provider: "claude", label: "Claude", unit: "runs", used: 4, limit: 20, calls: 4, errors: 0, fallbacks: 0, note: "Local count vs. daily soft cap" },
 ]

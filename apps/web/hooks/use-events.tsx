@@ -34,8 +34,15 @@ const EVENT_TYPES = [
   "run.status",
   "plan.status",
   "story.changed",
+  "chat.changed",
+  "chat.message",
+  "chat.delta",
+  "chat.status",
+  "chat.tool",
 ]
 const MAX_EVENTS = 300
+// Streaming text deltas are delivered to listeners but not kept in the shared history.
+const TRANSIENT = new Set(["chat.delta"])
 
 export function EventsProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<ConnectionState>("connecting")
@@ -66,7 +73,7 @@ export function EventsProvider({ children }: { children: ReactNode }) {
         // The server replays recent history on reconnect; drop anything already seen.
         if (seen.current.has(event.id)) return
         seen.current.add(event.id)
-        setEvents((prev) => [...prev, event].slice(-MAX_EVENTS))
+        if (!TRANSIENT.has(event.type)) setEvents((prev) => [...prev, event].slice(-MAX_EVENTS))
         for (const listener of listeners.current) listener(event)
       }
       for (const type of EVENT_TYPES) source.addEventListener(type, onEvent)

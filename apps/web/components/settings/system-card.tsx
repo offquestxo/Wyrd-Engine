@@ -38,7 +38,7 @@ export function SystemCard() {
       {claude.data && !claude.data.logged_in && (
         <p className="px-4 py-2 text-xs text-muted-foreground">{claude.data.detail}</p>
       )}
-      <Row label="Engine API"><span className="font-mono text-xs">{API_BASE}</span></Row>
+      <Row label="Engine API"><span className="font-mono text-xs">{API_BASE || "same origin /api → 127.0.0.1:8000"}</span></Row>
       <Row label="Live events (SSE)">
         <Badge variant="outline" className={status === "open" ? "border-success/40 text-success" : "border-warning/40 text-warning"}>
           {status}
