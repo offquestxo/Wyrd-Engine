@@ -32,6 +32,8 @@ from sqlmodel import Session, col, func, select
 
 from apps.api.config import load_scoring
 from apps.api.db.models import Dossier, Story, StorySource, utcnow
+from apps.api.providers.base import ProviderError
+from apps.api.providers.schemas import SupportItem, SupportVerdict
 from apps.api.research.texts import cap_words, excerpt_in
 from apps.api.settings import RESEARCH_DIR
 from apps.api.sources._http import SourceError
@@ -201,11 +203,20 @@ class RowCheck(BaseModel):
     truncated: bool = False
 
 
+META_SECTIONS = {"prose_numbers", "support_check"}  # not claim rows; counted separately
+SupportFn = Callable[[list[SupportItem]], Awaitable[list[SupportVerdict]]]
+
+
 async def check_rows(
-    data: DossierIn, lookup: TextLookup, max_words: int
+    data: DossierIn,
+    lookup: TextLookup,
+    max_words: int,
+    support: SupportFn | None = None,
 ) -> tuple[DossierIn, list[RowCheck], dict[str, str]]:
     """Run the checks. Returns the cleaned dossier (failed rows moved to open questions), the
-    per-row results, and per-source fetch errors."""
+    per-row results, and per-source fetch errors. `support` (the router's check_support)
+    checks that each excerpt supports every part of its claim; without it that step is
+    skipped and recorded as skipped."""
     by_n = {s.n: s for s in data.sources}
     texts: dict[str, str | None] = {}
     fetch_errors: dict[str, str] = {}
@@ -247,6 +258,7 @@ async def check_rows(
 
     checks: list[RowCheck] = []
     moved: list[str] = []
+    passed: list[tuple[str, Any, RowCheck]] = []  # rows that passed the excerpt check
     out = data.model_copy(deep=True)
 
     timeline: list[TimelineItem] = []
@@ -257,6 +269,7 @@ async def check_rows(
         checks.append(result)
         if result.ok:
             timeline.append(item)
+            passed.append(("timeline", item, result))
         else:
             moved.append(f"{item.date}: {item.event} — {result.reason}")
     out.timeline = timeline
@@ -273,6 +286,7 @@ async def check_rows(
         checks.append(result)
         if result.ok:
             numbers.append(num)
+            passed.append(("key_numbers", num, result))
         else:
             moved.append(f"{num.figure} ({num.meaning}) — {result.reason}")
     out.key_numbers = numbers
@@ -281,6 +295,8 @@ async def check_rows(
         out.twist_excerpt, _ = cap_words(out.twist_excerpt, max_words)
     twist = await verify("twist", out.twist, out.twist_source, out.twist_excerpt)
     checks.append(twist)
+    if twist.ok:
+        passed.append(("twist", out, twist))
     if not twist.ok:
         moved.append(f"Twist: {out.twist} — {twist.reason}")
         out.twist = "Unverified: see Open Questions."
@@ -295,10 +311,15 @@ async def check_rows(
             "key_people", f"{person.name}, {person.role}", person.source, person.excerpt
         )
         checks.append(result)
+        if result.ok:
+            passed.append(("key_people", person, result))
         if not result.ok:
             moved.append(f"{person.name} ({person.role}) — {result.reason}")
             person.source, person.excerpt = None, None
             person.role = f"{person.role} (unverified)"
+
+    support_status = await support_pass(out, passed, support, moved)
+    checks.append(RowCheck(section="support_check", claim=support_status, source=None, ok=True))
 
     # Specific numbers in the prose sections must come from a cited source too. They stay in
     # the prose (rewriting it is the researcher's job) but are listed as unverified.
@@ -335,6 +356,94 @@ async def check_rows(
     return out, checks, fetch_errors
 
 
+def _claim_text(kind: str, row: Any) -> str:
+    if kind == "timeline":
+        return f"{row.date}: {row.event}"
+    if kind == "key_numbers":
+        return f"{row.figure} — {row.meaning}"
+    if kind == "twist":
+        return str(row.twist)
+    return f"{row.name} — {row.role}"
+
+
+def _apply_trim(kind: str, row: Any, trimmed: str) -> bool:
+    """Put a trimmed claim back into its row. False if the trim doesn't fit the row."""
+    trimmed = trimmed.strip()
+    if kind == "timeline":
+        prefix = f"{row.date}:"
+        row.event = trimmed[len(prefix) :].strip() if trimmed.startswith(prefix) else trimmed
+        return bool(row.event)
+    if kind == "key_numbers":
+        if not figure_supported(row.figure, trimmed):
+            return False  # the figure itself was the unsupported part
+        meaning = trimmed.split("—", 1)[1].strip() if "—" in trimmed else trimmed
+        row.meaning = meaning
+        return bool(meaning)
+    if kind == "twist":
+        row.twist = trimmed
+        return True
+    role = trimmed.split("—", 1)[1].strip() if "—" in trimmed else trimmed
+    row.role = role
+    return bool(role)
+
+
+async def support_pass(
+    out: DossierIn,
+    passed: list[tuple[str, Any, RowCheck]],
+    support: SupportFn | None,
+    moved: list[str],
+) -> str:
+    """Claim-vs-excerpt support: a quote that exists can still be stretched by its claim.
+    Unsupported details are trimmed (when what's left still stands) or the row moves to Open
+    Questions. Returns a one-line status for the check summary."""
+    if not passed:
+        return "nothing to check"
+    if support is None:
+        return "skipped (no checker configured)"
+    items = [
+        SupportItem(
+            id=str(i),
+            claim=_claim_text(kind, row),
+            excerpt=(row.twist_excerpt if kind == "twist" else row.excerpt) or "",
+        )
+        for i, (kind, row, _) in enumerate(passed)
+    ]
+    try:
+        verdicts = {v.id: v for v in await support(items)}
+    except ProviderError as e:
+        return f"unavailable ({e}); rows kept on the excerpt check alone"
+    trimmed = removed = unchecked = 0
+    drop: set[int] = set()
+    for i, (kind, row, check) in enumerate(passed):
+        verdict = verdicts.get(str(i))
+        if verdict is None:
+            unchecked += 1
+            continue
+        if verdict.supported:
+            continue
+        parts = "; ".join(verdict.unsupported_parts) or "parts of the claim"
+        original = items[i].claim
+        if verdict.trimmed_claim and _apply_trim(kind, row, verdict.trimmed_claim):
+            trimmed += 1
+            check.reason = f"trimmed: excerpt doesn't support {parts}"
+            moved.append(f"Trimmed from “{original}”: {parts} (not in its excerpt)")
+            continue
+        removed += 1
+        check.ok, check.reason = False, f"excerpt doesn't support: {parts}"
+        moved.append(f"{original} — excerpt doesn't support: {parts}")
+        drop.add(id(row))
+        if kind == "twist":
+            out.twist = "Unverified: see Open Questions."
+            out.twist_source = out.twist_excerpt = None
+        elif kind == "key_people":
+            row.source, row.excerpt = None, None
+            row.role = f"{row.role} (unverified)"
+    out.timeline = [t for t in out.timeline if id(t) not in drop]
+    out.key_numbers = [k for k in out.key_numbers if id(k) not in drop]
+    status = f"{len(passed)} checked: {trimmed} trimmed, {removed} moved"
+    return status + (f", {unchecked} without a verdict (kept)" if unchecked else "")
+
+
 # ---------------------------------------------------------------------------- rendering
 def _cell(text: str) -> str:
     return text.replace("|", "\\|").replace("\n", " ")
@@ -349,9 +458,9 @@ def render_markdown(
         src = next((s for s in d.sources if s.n == n), None)
         return f"[[{n}]]({src.url})" if src else f"[{n}]"
 
-    rows = [c for c in checks if c.section != "prose_numbers"]
+    rows = [c for c in checks if c.section not in META_SECTIONS]
     passed = sum(1 for c in rows if c.ok)
-    prose = len(checks) - len(rows)
+    prose = sum(1 for c in checks if c.section == "prose_numbers")
     note = f" {prose} number(s) in the prose weren't found in any cited source." if prose else ""
     lines = [
         f"# {d.title} — Research Dossier",
@@ -448,6 +557,7 @@ async def save_dossier(
     second_opinion: dict[str, Any] | None = None,
     run_id: int | None = None,
     research_dir: Path | None = None,
+    support: SupportFn | None = None,
 ) -> dict[str, Any]:
     cfg = load_scoring().research
     with Session(engine) as s:
@@ -456,7 +566,7 @@ async def save_dossier(
             raise LookupError(f"no story {story_id}")
         slug = story.slug
     cleaned, checks, fetch_errors = await check_rows(
-        data, lookup, int(cfg.get("excerpt_max_words", 40))
+        data, lookup, int(cfg.get("excerpt_max_words", 40)), support
     )
     domains = list(cfg.get("primary_domains", []))
     primary = {src.n: is_primary(src.url, domains) for src in cleaned.sources}
@@ -474,12 +584,13 @@ async def save_dossier(
         )
     markdown = render_markdown(cleaned, primary, checks, version)
     srcs = sources_json(cleaned, primary, checks)
-    rows = [c for c in checks if c.section != "prose_numbers"]
+    rows = [c for c in checks if c.section not in META_SECTIONS]
     passed = sum(1 for c in rows if c.ok)
     summary = {
         "passed": passed,
         "failed": len(rows) - passed,
-        "prose_numbers_unverified": len(checks) - len(rows),
+        "prose_numbers_unverified": sum(1 for c in checks if c.section == "prose_numbers"),
+        "support_check": next((c.claim for c in checks if c.section == "support_check"), "not run"),
         "truncated": sum(1 for c in checks if c.truncated),
         "rows": [c.model_dump() for c in checks],
         "fetch_errors": fetch_errors,
@@ -535,7 +646,14 @@ async def save_dossier(
         "story_id": story_id,
         "version": version,
         "excerpt_check": {
-            k: summary[k] for k in ("passed", "failed", "truncated", "prose_numbers_unverified")
+            k: summary[k]
+            for k in (
+                "passed",
+                "failed",
+                "truncated",
+                "prose_numbers_unverified",
+                "support_check",
+            )
         },
         "moved_to_open_questions": [
             f"{c.section}: {c.claim} — {c.reason}" for c in checks if not c.ok

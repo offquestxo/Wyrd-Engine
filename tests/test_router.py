@@ -422,3 +422,41 @@ async def test_headroom_route_prefers_model_with_most_daily_requests_left(engine
     for _ in range(5):  # flash: 15/20 left (75%) < lite 100%
         usage.record(provider="gemini", model="gemini-flash", task="x", ok=True)
     assert order() == ["lite", "flash", "chat"]
+
+
+async def test_check_support_falls_back_and_returns_verdicts(engine: Any) -> None:
+    from apps.api.providers.schemas import SupportItem
+
+    config = make_config()
+    config.tasks["check_support"] = [
+        RouteStep(provider="groq", model="fast"),
+        RouteStep(provider="nvidia", model="chat"),
+    ]
+    reply = {
+        "verdicts": [
+            {"id": "0", "supported": True},
+            {
+                "id": "1",
+                "supported": False,
+                "unsupported_parts": ["to save money"],
+                "trimmed_claim": "Fired 3,400 workers",
+            },
+        ]
+    }
+    groq = FakeProvider("groq", [ProviderError("groq", "HTTP 401", status=401)])
+    nvidia = FakeProvider("nvidia", [json.dumps(reply)])
+    router = Router(config, {"groq": groq, "nvidia": nvidia}, UsageLog(engine))  # type: ignore[arg-type]
+    items = [
+        SupportItem(
+            id="0", claim="Filed Chapter 11 on 2008-11-10", excerpt="filed ... November 10, 2008"
+        ),
+        SupportItem(
+            id="1", claim="Fired 3,400 workers to save money", excerpt="laid off approximately 3400"
+        ),
+    ]
+    verdicts = await router.check_support(items)
+    assert [v.supported for v in verdicts] == [True, False]
+    assert verdicts[1].trimmed_claim == "Fired 3,400 workers"
+    assert (
+        "excerpt" in nvidia.calls[0]["user"] and "every factual part" in nvidia.calls[0]["system"]
+    )

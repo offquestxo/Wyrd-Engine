@@ -87,12 +87,41 @@ class OutlierBatch(BaseModel):
     analyses: list[OutlierAnalysis]
 
 
+# --- check_support ---------------------------------------------------------
+class SupportItem(BaseModel):
+    id: str
+    claim: str
+    excerpt: str
+
+
+class SupportVerdict(BaseModel):
+    id: str
+    supported: bool = Field(description="true only if the excerpt supports EVERY factual part")
+    unsupported_parts: list[str] = Field(
+        default_factory=list, description="details in the claim the excerpt doesn't support"
+    )
+    trimmed_claim: str | None = Field(
+        default=None,
+        description="the claim with unsupported details removed, only if what remains is "
+        "still a useful, fully supported statement; else null",
+    )
+
+
+class SupportBatch(BaseModel):
+    verdicts: list[SupportVerdict]
+
+
 # --- second_opinion --------------------------------------------------------
 class ClaimFlag(BaseModel):
     claim: str
     issue: str
     severity: Literal["low", "medium", "high"]
     suggestion: str
+    kind: Literal["unsupported", "interpretation", "superlative", "defamation", "weak_source"] = (
+        Field(
+            default="unsupported", description="interpretation = opinion/causation stated as fact"
+        )
+    )
 
 
 class SecondOpinion(BaseModel):

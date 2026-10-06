@@ -429,7 +429,7 @@ async def second_opinion(dossier: dossier_mod.DossierIn) -> dict[str, Any]:
     _count("second_opinion")
     cfg = load_scoring().research
     _, checks, fetch_errors = await dossier_mod.check_rows(
-        dossier, _lookup, int(cfg.get("excerpt_max_words", 40))
+        dossier, _lookup, int(cfg.get("excerpt_max_words", 40)), get_router().check_support
     )
     draft = dossier_mod.render_markdown(dossier, {}, checks, 0)
     try:
@@ -439,11 +439,20 @@ async def second_opinion(dossier: dossier_mod.DossierIn) -> dict[str, Any]:
     except ProviderError as e:
         _log("warn", f"second opinion unavailable on every provider: {e}")
         flags, overall = [], f"unavailable: {e}"
-    failed = [c.model_dump() for c in checks if not c.ok]
+    rows = [c for c in checks if c.section not in dossier_mod.META_SECTIONS]
+    failed = [c.model_dump() for c in checks if not c.ok]  # incl. unverified prose numbers
+    passed = sum(1 for c in rows if c.ok)
+    support_status = next((c.claim for c in checks if c.section == "support_check"), "not run")
+    trims = [c.model_dump() for c in rows if c.ok and c.reason]  # trimmed by the support check
     result = {
         "flags": flags,
         "overall": overall,
-        "excerpt_precheck": {"passed": len(checks) - len(failed), "failed": failed},
+        "excerpt_precheck": {
+            "passed": passed,
+            "failed": failed,
+            "trimmed": trims,
+            "support_check": support_status,
+        },
         "fetch_errors": fetch_errors,
         "at": datetime.now(UTC).isoformat(),
     }
@@ -452,8 +461,8 @@ async def second_opinion(dossier: dossier_mod.DossierIn) -> dict[str, Any]:
         session.second_opinions.append(result)
     _log(
         "info",
-        f"second opinion: {len(flags)} flags; excerpt pre-check "
-        f"{len(checks) - len(failed)} passed, {len(failed)} failed",
+        f"second opinion: {len(flags)} flags; excerpt pre-check {passed} passed, "
+        f"{len(failed)} failed; support check {support_status}",
     )
     return result
 
@@ -490,6 +499,7 @@ async def save_dossier(
             _lookup,
             second_opinion=review,
             run_id=session.run_id if session else None,
+            support=get_router().check_support,
         )
     except LookupError as e:
         raise ToolError(str(e)) from e

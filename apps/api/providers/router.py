@@ -42,6 +42,9 @@ from apps.api.providers.schemas import (
     OutlierBatch,
     ScoreBatch,
     SecondOpinion,
+    SupportBatch,
+    SupportItem,
+    SupportVerdict,
     VideoForAnalysis,
 )
 from apps.api.providers.usage import UsageLog
@@ -533,6 +536,26 @@ class Router:
         payload = [video.model_dump() for video in videos]
         batch = await self._json_task("analyze_outliers", "outlier_analysis", payload, OutlierBatch)
         return batch.analyses
+
+    async def check_support(self, items: Sequence[SupportItem]) -> list[SupportVerdict]:
+        """Per claim: does its excerpt support every factual part? Batched to the route's
+        request budget; a claim with no verdict back is treated as unchecked (not supported)."""
+        budget = self.request_budget("check_support") or 6000
+        verdicts: list[SupportVerdict] = []
+        batch: list[SupportItem] = []
+        used = 1500  # prompt overhead
+        for item in [*items, None]:
+            size = estimate_tokens(item.model_dump_json()) + 80 if item else 0
+            if batch and (item is None or used + size > budget):
+                out = await self._json_task(
+                    "check_support", "claim_support", [b.model_dump() for b in batch], SupportBatch
+                )
+                verdicts += out.verdicts
+                batch, used = [], 1500
+            if item is not None:
+                batch.append(item)
+                used += size
+        return verdicts
 
     async def second_opinion(self, dossier_markdown: str) -> SecondOpinion:
         return await self._json_task(
