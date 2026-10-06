@@ -399,3 +399,42 @@ The owner needs to activate the free Experiment plan (or check limits) at `admin
 Results: 41/41 claims pass the excerpt check, the support check (Groq 120B) makes 0 trims and 0 moves, and no prose number is unverified.
 
 **1988 Best Buy offer:** Wikipedia cites Alan Wurtzel's 2012 memoir *Good to Great to Gone* (p. 215), which is first-hand but not contemporaneous. Searches turned up no 1988–89 source: Internet Archive full-text, web search, and a 2013 Richmond Fed *Econ Focus* article, which covers the Best Buy rivalry but not the offer. LoC newspapers stop at 1963. The offer stays in the dossier as "reportedly", with an Open Question.
+
+## Phase 7: Notion sync (2026-10-06)
+
+**API:** `Notion-Version: 2026-03-11`, the latest version as of 2026-10-06 (developers.notion.com/reference/versioning).
+- A database has data sources. The engine reads `data_sources[0].id` from `GET /v1/databases/{id}`, creates pages with `parent: {type: "data_source_id"}`, and lists them with `POST /v1/data_sources/{id}/query` (100 per page, cursor pagination).
+- `archived` is now `in_trash`.
+- No SDK: a small httpx client (`notion_sync.py`), so the version header is under our control.
+
+**Rate limit:** Notion allows about 3 requests/s per connection (non-Enterprise), with a separate workspace budget.
+- Requests are paced at least 0.4 s apart (`engine.yaml` notion.min_interval_s).
+- On a 429 the client waits at least `Retry-After`, then backs off exponentially with jitter. 5xx and network errors retry too (`max_retries` 4).
+- The last report counts the requests each sync made.
+
+**Database:** "wyrd.exe Stories", created once with the Notion connector (owner's account, private, workspace top level).
+- Properties: Title (title); Status, Series and Format (select, with the engine's values as options); Hook, Scores, Sources and Notes (text); Gap Score and Engine ID (number); Updated (date).
+- `Engine ID` maps pages back to stories, in addition to `stories.notion_page_id`.
+- Status is a **select**, not Notion's Status type, so the 9 engine statuses map one-to-one.
+- Before every sync the engine checks these property names and types, and stops with a list of differences if they don't match.
+- The app itself only uses `NOTION_TOKEN` and `NOTION_DATABASE_ID`. The integration must be added to the database (••• → Connections).
+
+**Push** (on Sync now, or a few seconds after a story change when auto-sync is on):
+- Pushes Title, Status, Series, Format, Hook, Scores, Gap Score, Sources, Updated, plus Notes and Engine ID.
+- A story is pushed when it has no page yet or `updated_at > notion_synced_at`; unchanged stories cost no requests.
+- A page deleted in Notion is recreated.
+- Every Hook starts with `UNVERIFIED LEAD:`, the same rule as the UI badge (hooks are LLM-written; facts come from dossiers).
+- Text is cut to Notion's 2000-character limit.
+
+**Pull** (Status and Notes only), run before the push on every full sync:
+- Notion's `last_edited_time` only has minute precision, so changes are detected by value. After a push, Notion holds exactly what was pushed, so a different Status/Notes value means it was edited in Notion.
+- If the story didn't change locally since the last sync, Notion's value is applied. If both changed, the newer of `last_edited_time` and `updated_at` wins.
+- A pulled change sets `updated_at = notion_synced_at = now`, so it isn't pushed straight back. It publishes `story.changed` with `source: notion`, which the auto-sync watcher ignores.
+- A Notion status that isn't one of the 9 engine statuses is ignored and reported. Pages without an Engine ID (added by hand in Notion) are ignored and counted.
+- Known edge: if both sides change within the same minute, the minute-rounded Notion time can lose to the local edit.
+
+**Auto-sync** (Settings toggle, stored in the settings table, off by default) pushes about 5 s after the last story change and runs a full sync every 10 minutes. Sync isn't an agent, so it doesn't go through plan approval; it only mirrors data and only Status/Notes come back.
+
+**No token:** the service reports `configured: false`, Sync now returns 409, and the auto-sync watcher does nothing. Nothing else depends on Notion; a test runs the API with no Notion settings.
+
+**Also fixed:** the Research page's live refresh listened for `dossier.saved`, but that event wasn't in the SSE listener list, so it never fired.

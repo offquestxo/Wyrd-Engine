@@ -85,4 +85,7 @@ You are building and maintaining the wyrd.exe story engine: a local app that fin
   (source_* per module, extract_from_document, second_opinion, save_dossier), structured dossiers with
   excerpt, figure, claim-support (Groq 120B → NVIDIA), prose-number and duration checks; interpretation flags
   must be resolved before saving. Circuit City dossier v2: 41/41 claims verified (v1 in history).
-- Phase 7 (Notion sync): **in progress** (docs/phase7-progress.md).
+- Phase 7 (Notion sync): **done**, awaiting review (not pushed). `notion_sync.py` (Notion-Version
+  2026-03-11, data sources, ≤ 3 req/s with Retry-After backoff): push 9 fields + Notes + Engine ID, pull
+  Status/Notes with value-based change detection (newest wins), auto-sync toggle, Settings card.
+  Database "wyrd.exe Stories" created via the Notion connector; live sync waits for the owner's NOTION_TOKEN.
