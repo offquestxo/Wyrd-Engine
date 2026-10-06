@@ -17,6 +17,7 @@ from sqlmodel import Session, col, select
 from apps.api.agents.registry import AGENTS
 from apps.api.config import EngineConfig, ProvidersConfig
 from apps.api.db.models import AgentRun, ProviderUsage
+from apps.api.settings_store import get_setting
 
 LABELS = {
     "groq": "Groq",
@@ -98,7 +99,7 @@ def build_report(
                 )
             meters.append(_llm_meter(name, models, key_status.get(name, "missing")))
         meters.append(_youtube_meter(s, since_day, providers, key_status.get("youtube", "missing")))
-        meters.append(_claude_meter(s, since_day, providers))
+        meters.append(_claude_meter(s, engine, since_day, engine_cfg))
     return {
         "since": since_day.isoformat(),
         "timezone": engine_cfg.usage.day_reset_timezone,
@@ -160,26 +161,71 @@ def _youtube_meter(
     }
 
 
-def _claude_meter(s: Session, since: datetime, providers: ProvidersConfig) -> dict[str, Any]:
-    claude_agents = [n for n, a in AGENTS.items() if a.uses_claude]
-    count = s.exec(
-        select(func.count(col(AgentRun.id))).where(
-            col(AgentRun.agent).in_(claude_agents), col(AgentRun.started_at) >= since
-        )
+CLAUDE_CAP_KEY = "claude.daily_soft_cap"
+CLAUDE_RATE_KEY = "claude.rate_limit"
+
+
+def claude_soft_cap(engine: Engine, engine_cfg: EngineConfig) -> int:
+    """Settings override, else engine.yaml orchestrator.daily_soft_cap."""
+    value = get_setting(engine, CLAUDE_CAP_KEY)
+    return (
+        int(value)
+        if isinstance(value, int | float) and value > 0
+        else (engine_cfg.orchestrator.daily_soft_cap)
+    )
+
+
+def _claude_meter(
+    s: Session, engine: Engine, since: datetime, engine_cfg: EngineConfig
+) -> dict[str, Any]:
+    """Claude calls today: orchestrator chat turns (provider_usage rows) plus runs of agents
+    that use Claude. Pro plan usage isn't exposed, so this is a local count against a soft cap.
+    `rate_limit` is the last status Claude Code itself reported (allowed / warning / rejected)."""
+    turns_row = s.execute(
+        sa_select(
+            func.count(col(ProviderUsage.id)),
+            func.coalesce(func.sum(col(ProviderUsage.latency_ms)), 0),
+            func.coalesce(func.sum(col(ProviderUsage.turns)), 0),
+            func.coalesce(func.sum(1 - col(ProviderUsage.ok)), 0),
+            func.coalesce(
+                func.sum(col(ProviderUsage.tokens_in) + col(ProviderUsage.tokens_out)), 0
+            ),
+        ).where(col(ProviderUsage.provider) == "claude", col(ProviderUsage.ts) >= since)
     ).one()
-    limits = providers.providers["claude"].limits if "claude" in providers.providers else {}
+    chat_calls, duration_ms, turns, errors, tokens = (int(v) for v in turns_row)
+    claude_agents = [n for n, a in AGENTS.items() if a.uses_claude]
+    agent_runs = int(
+        s.exec(
+            select(func.count(col(AgentRun.id))).where(
+                col(AgentRun.agent).in_(claude_agents), col(AgentRun.started_at) >= since
+            )
+        ).one()
+    )
+    used = chat_calls + agent_runs
+    cap = claude_soft_cap(engine, engine_cfg)
+    ratio = used / cap if cap else 0.0
     return {
         "provider": "claude",
         "label": "Claude",
         "status": "set",
-        "used": int(count),
-        "limit": limits.get("daily_soft_cap_runs"),
-        "unit": "runs",
-        "requests": int(count),
-        "tokens": 0,
-        "errors": 0,
+        "used": used,
+        "limit": cap,
+        "unit": "calls",
+        "requests": used,
+        "tokens": tokens,
+        "errors": errors,
         "fallbacks": 0,
         "models": [],
+        "claude": {
+            "chat_turns": chat_calls,
+            "agent_runs": agent_runs,
+            "duration_s": round(duration_ms / 1000),
+            "turns": turns,
+            "soft_cap": cap,
+            "warn": ratio >= engine_cfg.orchestrator.warn_ratio,
+            "over": used >= cap,
+            "rate_limit": get_setting(engine, CLAUDE_RATE_KEY),
+        },
     }
 
 

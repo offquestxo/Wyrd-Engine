@@ -30,9 +30,13 @@ class UsageLog:
         latency_ms: int = 0,
         error: str | None = None,
         fallback: bool = False,
+        turns: int = 0,
+        chat_id: int | None = None,
     ) -> None:
         row = ProviderUsage(
             fallback=fallback,
+            turns=turns,
+            chat_id=chat_id,
             provider=provider,
             model=model,
             task=task,

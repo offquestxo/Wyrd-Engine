@@ -47,6 +47,34 @@ class ResearcherParams(_Params):
         return self
 
 
+StoryStatusName = Literal[
+    "Inbox",
+    "Shortlisted",
+    "Researching",
+    "Scripting",
+    "Fact-check",
+    "Recording",
+    "Editing",
+    "Published",
+    "Archived",
+]
+
+
+class StoryFields(_Params):
+    status: StoryStatusName | None = None
+    series: SeriesName | None = None
+    format: Literal["Short", "Long"] | None = None
+    notes: str | None = None
+    hook: str | None = None
+
+
+class StoryUpdateParams(_Params):
+    """Internal step: applies an orchestrator `update_story` that changes a story's status."""
+
+    story_id: int
+    fields: StoryFields
+
+
 class DemoParams(_Params):
     """Test agent: simulates a run so the job pipeline can be exercised end to end."""
 

@@ -125,10 +125,11 @@ providers:
       search_calls_per_day: 100
 
   claude:
-    # Pro plan usage is not exposed programmatically; tracked locally as runs.
+    # Pro plan usage is not exposed programmatically; tracked locally as calls (chat turns +
+    # Claude agent runs). The daily soft cap is engine.yaml orchestrator.daily_soft_cap
+    # (overridable in Settings).
     kind: quota_only
-    limits:
-      daily_soft_cap_runs: 20
+    limits: {}
 
 # Retry policy for 429 / 5xx / timeouts, per provider attempt.
 retry:

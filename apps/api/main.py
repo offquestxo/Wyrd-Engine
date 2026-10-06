@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -13,8 +14,9 @@ from fastapi.sse import EventSourceResponse, ServerSentEvent
 from pydantic import BaseModel
 from sqlmodel import Session, col, select
 
-from apps.api import outliers, sources, stories
+from apps.api import mcp_server, memory, outliers, sources, stories
 from apps.api.agents.registry import AGENTS
+from apps.api.chat import ChatError, ChatService
 from apps.api.config import load_engine, load_providers
 from apps.api.config_files import ConfigError, ConfigFile, read_config, write_config
 from apps.api.db.models import AgentRun, RunLog
@@ -28,7 +30,7 @@ from apps.api.settings import get_settings, mask_secret
 from apps.api.settings_store import auto_approve_key, get_setting, set_setting
 from apps.api.sources import youtube
 from apps.api.system import ClaudeStatus, check_claude_cli
-from apps.api.usage_report import build_report
+from apps.api.usage_report import CLAUDE_CAP_KEY, build_report, claude_soft_cap
 
 state: dict[str, Any] = {"tests": {}}
 
@@ -51,10 +53,25 @@ KEYS: list[dict[str, Any]] = [
 ]
 
 
+CLAUDE_CHECK_TTL_S = 60.0
+mcp_app = mcp_server.mcp.http_app(path="/")
+
+
+async def cached_claude_status() -> ClaudeStatus:
+    """Claude CLI status, re-checked at most once a minute (and on /api/system/claude)."""
+    checked = state.get("claude_checked_at", 0.0)
+    if state.get("claude") is None or time.monotonic() - checked > CLAUDE_CHECK_TTL_S:
+        state["claude"] = await check_claude_cli()
+        state["claude_checked_at"] = time.monotonic()
+    status: ClaudeStatus = state["claude"]
+    return status
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     engine = get_engine()  # creates / migrates data/wyrd.db
-    state["claude"] = await check_claude_cli()
+    state["claude"] = None
+    await cached_claude_status()
     jobs_cfg = load_engine().jobs
     runner = JobRunner(
         engine,
@@ -63,17 +80,29 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         poll_interval_s=jobs_cfg.poll_interval_s,
     )
     state["runner"] = runner
-    state["plans"] = PlanService(engine, bus, runner)
+    plans = PlanService(engine, bus, runner)
+    state["plans"] = plans
+    state["chats"] = ChatService(
+        engine, bus, plans, load_engine().orchestrator, cached_claude_status
+    )
+    mcp_server.bind(plans)
     await runner.start()
+    backfill = asyncio.create_task(memory.backfill(engine), name="memory-backfill")
     try:
-        yield
+        async with mcp_app.lifespan(_app):
+            yield
     finally:
+        backfill.cancel()
+        await state["chats"].stop()
         await runner.stop()
-        state.pop("runner", None)
-        state.pop("plans", None)
+        mcp_server.bind(None)
+        for key in ("runner", "plans", "chats"):
+            state.pop(key, None)
 
 
 app = FastAPI(title="wyrd.exe story engine", version="0.1.0", lifespan=lifespan)
+# MCP for the orchestrator's Claude sessions. Not under /api, so the web proxy never exposes it.
+app.mount("/mcp", mcp_server.TokenGuard(mcp_app))
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://127.0.0.1:3000", "http://localhost:3000"],
@@ -91,8 +120,8 @@ async def health() -> dict[str, Any]:
 
 @app.get("/api/system/claude")
 async def claude_status() -> ClaudeStatus:
-    state["claude"] = await check_claude_cli()
-    return state["claude"]
+    state["claude"] = None  # force a fresh check
+    return await cached_claude_status()
 
 
 @app.post("/api/system/reload")
@@ -403,6 +432,105 @@ async def story_from_outlier(video_id: str) -> dict[str, Any]:
         raise HTTPException(404, f"no scanned video {video_id}")
     bus.publish("story.changed", story_id=result["story_id"], status="Inbox")
     return result
+
+
+# ---------------------------------------------------------------------------- chats
+def _chats() -> ChatService:
+    service: ChatService | None = state.get("chats")
+    if service is None:
+        raise HTTPException(503, "chat service is not running")
+    return service
+
+
+class ChatIn(BaseModel):
+    title: str | None = None
+
+
+class ChatPatch(BaseModel):
+    title: str
+
+
+class MessageIn(BaseModel):
+    content: str
+
+
+@app.get("/api/chats")
+async def list_chats() -> list[dict[str, Any]]:
+    return _chats().list()
+
+
+@app.post("/api/chats")
+async def create_chat(body: ChatIn | None = None) -> dict[str, Any]:
+    return _chats().create(body.title if body else None)
+
+
+@app.get("/api/chats/{chat_id}")
+async def get_chat(chat_id: int) -> dict[str, Any]:
+    chat = _chats().get(chat_id)
+    if chat is None:
+        raise HTTPException(404, f"no chat {chat_id}")
+    return chat
+
+
+@app.patch("/api/chats/{chat_id}")
+async def rename_chat(chat_id: int, body: ChatPatch) -> dict[str, Any]:
+    chat = _chats().rename(chat_id, body.title)
+    if chat is None:
+        raise HTTPException(404, f"no chat {chat_id}")
+    return chat
+
+
+@app.delete("/api/chats/{chat_id}")
+async def delete_chat(chat_id: int) -> dict[str, bool]:
+    try:
+        if not _chats().delete(chat_id):
+            raise HTTPException(404, f"no chat {chat_id}")
+    except ChatError as e:
+        raise HTTPException(409, str(e)) from e
+    return {"ok": True}
+
+
+@app.post("/api/chats/{chat_id}/messages", status_code=202)
+async def send_message(chat_id: int, body: MessageIn) -> dict[str, Any]:
+    """Store the message and start handling it (fast path or orchestrator) in the background.
+    Replies arrive over SSE (`chat.message`, `chat.delta`, `chat.status`)."""
+    try:
+        return await _chats().send(chat_id, body.content)
+    except LookupError as e:
+        raise HTTPException(404, str(e)) from e
+    except ChatError as e:
+        raise HTTPException(422, str(e)) from e
+
+
+@app.get("/api/memory/search")
+async def search_memory_endpoint(q: str, limit: int = 8) -> dict[str, Any]:
+    return await memory.search(get_engine(), q, limit=min(limit, 30))
+
+
+# ---------------------------------------------------------------------------- claude settings
+class ClaudeSettingsIn(BaseModel):
+    soft_cap: int
+
+
+@app.get("/api/settings/claude")
+async def get_claude_settings() -> dict[str, Any]:
+    cfg = load_engine()
+    return {
+        "soft_cap": claude_soft_cap(get_engine(), cfg),
+        "default_soft_cap": cfg.orchestrator.daily_soft_cap,
+        "model": cfg.orchestrator.model,
+        "effort": cfg.orchestrator.effort,
+        "tools": mcp_server.allowed_tools(),
+    }
+
+
+@app.put("/api/settings/claude")
+async def put_claude_settings(body: ClaudeSettingsIn) -> dict[str, Any]:
+    if not 1 <= body.soft_cap <= 1000:
+        raise HTTPException(422, "soft cap must be between 1 and 1000")
+    set_setting(get_engine(), CLAUDE_CAP_KEY, body.soft_cap)
+    bus.publish("settings.changed", claude_soft_cap=body.soft_cap)
+    return await get_claude_settings()
 
 
 # ---------------------------------------------------------------------------- usage

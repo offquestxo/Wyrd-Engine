@@ -226,6 +226,8 @@ class ProviderUsage(SQLModel, table=True):
     ok: bool
     error: str | None = None
     fallback: bool = False
+    turns: int = 0
+    chat_id: int | None = Field(default=None, foreign_key="chats.id")
     ts: datetime = Field(default_factory=utcnow, sa_type=UTCDateTime)
 
 

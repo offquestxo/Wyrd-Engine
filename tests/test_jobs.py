@@ -248,6 +248,12 @@ def test_usage_report_counts_today(engine: Any) -> None:
                 provider="youtube", model="videos", task="videos", ok=True, units=1, ts=now
             )
         )
+        for ok in (True, False):  # two orchestrator chat turns
+            s.add(
+                ProviderUsage(
+                    provider="claude", task="orchestrator", ok=ok, latency_ms=2500, turns=3, ts=now
+                )
+            )
         s.commit()
     report = build_report(engine, load_providers(), load_engine(), {"mistral": "set"}, now=now)
     assert report["since"] == "2026-10-05T07:00:00+00:00"
@@ -258,7 +264,11 @@ def test_usage_report_counts_today(engine: Any) -> None:
     assert small["tokens"] == 450
     youtube = meters["youtube"]
     assert (youtube["used"], youtube["limit"], youtube["search_calls"]) == (2, 10000, 1)
-    assert meters["claude"]["unit"] == "runs"
+    claude = meters["claude"]
+    assert claude["unit"] == "calls" and claude["used"] == 2 and claude["errors"] == 1
+    assert claude["limit"] == load_engine().orchestrator.daily_soft_cap
+    assert claude["claude"]["turns"] == 6 and claude["claude"]["duration_s"] == 5
+    assert claude["claude"]["warn"] is False
 
 
 def test_day_start_uses_configured_timezone() -> None:
