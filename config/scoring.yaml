@@ -17,6 +17,46 @@ scout:
     hook_number: 0.8
     freshness: 1.0
 
+# Cheap rules applied to news items before any LLM scoring (case-insensitive).
+prefilter:
+  min_title_words: 4
+  # Headlines matching any of these regexes are dropped (advice threads, listicles, promos…).
+  drop_title_patterns:
+    - "^(how (do|can|should) i|should i|anyone (else|know)|what('s| is) your|ama\\b|ask hn)"
+    - "^(daily|weekly|monthly) (discussion|thread)"
+    - "\\b(horoscope|recipe|giveaway|coupon|promo code|deal of the day|webinar|sponsored)\\b"
+    - "\\b(nfl|nba|mlb|nhl|premier league|box office|red carpet)\\b"
+  # Feeds whose items must mention at least one business keyword to be scored.
+  require_business_keyword_for: ["Hacker News", "r/"]
+  business_keywords:
+    - company
+    - startup
+    - ceo
+    - founder
+    - bankrupt
+    - chapter 11
+    - fraud
+    - lawsuit
+    - sued
+    - indicted
+    - sec
+    - layoffs
+    - acquired
+    - acquisition
+    - shut down
+    - shuts down
+    - collapse
+    - billion
+    - million
+    - valuation
+    - ipo
+    - scandal
+    - brand
+    - retailer
+    - restructuring
+    - debt
+    - revenue
+
 gap_finder:
   youtube_view_threshold: 100000     # a video above this many views counts as existing coverage
   search_results_per_check: 10       # videos looked at per search.list call

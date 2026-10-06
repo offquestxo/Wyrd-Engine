@@ -130,6 +130,38 @@ class Ctx:
         self.steps.append(name)
 
 
+class FakeParallel:
+    """Stands in for providers/parallel.py: scores everything through FakeRouter in one batch."""
+
+    def __init__(self, router: FakeRouter) -> None:
+        self.router = router
+
+    async def score(
+        self,
+        items: list[ItemToScore],
+        series_hint: str = "",
+        on_batch: Any = None,
+        on_lane_drop: Any = None,
+    ) -> Any:
+        from apps.api.providers.parallel import BatchResult, ParallelOutcome
+
+        try:
+            scores = await self.router.score_items(items, series_hint)
+        except ProviderError as e:
+            if on_lane_drop:
+                on_lane_drop("fake/model", str(e))
+            return ParallelOutcome(
+                scores={}, scored_by={}, unscored=list(items), lane_errors=[str(e)]
+            )
+        if on_batch:
+            on_batch(BatchResult("fake", "model", list(items), scores, 0.1))
+        return ParallelOutcome(
+            scores={s.id: s for s in scores},
+            scored_by={s.id: "fake/model" for s in scores},
+            unscored=[],
+        )
+
+
 class FakeRouter:
     def __init__(self, fail_scoring: bool = False) -> None:
         self.scored: list[str] = []
@@ -190,6 +222,7 @@ def fake_news(monkeypatch: pytest.MonkeyPatch, router: FakeRouter) -> None:
     ):
         monkeypatch.setattr(mod, fn, empty)
     monkeypatch.setattr(scout, "get_router", lambda: router)
+    monkeypatch.setattr(scout, "parallel_scorer", lambda: FakeParallel(router))
 
 
 async def test_news_run_saves_scored_deduplicated_stories_with_sources(
@@ -214,6 +247,8 @@ async def test_news_run_saves_scored_deduplicated_stories_with_sources(
     assert len(acme_sources) > 1  # duplicates were kept as extra sources
     assert acme.status == "Inbox" and acme.scores and acme.scores["total"] == 9.0
     assert acme.hook == "A hook." and acme.series == "Fraud Files"
+    assert acme.scores["scored_by"] == "fake/model"
+    assert any("Scored" in msg and "fake/model" in msg for _, msg in ctx.logs)
     assert len(vectors) == len(stories)  # embeddings stored for future dedup
     assert result["counts"]["news_saved"] == len(stories)
     assert any("GDELT" in e for e in result["source_errors"])  # failing source reported, not fatal
@@ -296,6 +331,7 @@ async def test_gap_finder_stays_within_todays_youtube_search_budget(
     calls = {"search": 0, "videos": 0}
     fake_wikipedia_and_youtube(monkeypatch, calls)
     monkeypatch.setattr(scout, "get_router", lambda: FakeRouter())
+    monkeypatch.setattr(scout, "parallel_scorer", lambda: FakeParallel(FakeRouter()))
     # 85 of 100 search calls already used today; reserve is 10 → only 5 checks allowed.
     with Session(engine) as s:
         for _ in range(85):
@@ -345,3 +381,26 @@ def test_source_excerpt_dropped_when_it_repeats_the_headline() -> None:
         item("Acme files", "https://r/2", snippet="The retailer owes $2B."), False
     )
     assert kept.excerpt == "The retailer owes $2B."
+
+
+def test_prefilter_drops_obvious_noise() -> None:
+    rules = {
+        "min_title_words": 4,
+        "drop_title_patterns": [r"^(how (do|can|should) i|should i)", r"\b(recipe|nfl)\b"],
+        "require_business_keyword_for": ["Hacker News", "r/"],
+        "business_keywords": ["company", "fraud", "sec"],
+    }
+    leads = [
+        Lead(item("Acme charged with securities fraud by regulators", "https://1"), "Google News"),
+        Lead(item("Short title", "https://2"), "Google News"),
+        Lead(item("How do I price my consulting services", "https://3"), "r/Entrepreneur"),
+        Lead(item("The best weeknight pasta recipe ever", "https://4"), "Google News"),
+        Lead(item("Show HN: a terminal game I wrote", "https://5"), "Hacker News: shut down"),
+        Lead(
+            item("Second thoughts on my new keyboard layout", "https://6"), "r/business"
+        ),  # 'sec' ≠ 'second'
+        Lead(item("Startup company shuts down after fraud probe", "https://7"), "Hacker News: x"),
+    ]
+    kept, dropped = scout.prefilter(leads, rules)
+    assert [k.item.url for k in kept] == ["https://1", "https://7"]
+    assert dropped == {"too short": 1, "title pattern": 2, "no business keyword": 2}

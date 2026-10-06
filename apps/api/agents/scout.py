@@ -35,7 +35,8 @@ from apps.api.agents.params import ScoutParams
 from apps.api.config import load_engine, load_providers, load_scoring, load_sources
 from apps.api.db.session import get_engine
 from apps.api.providers.base import ProviderError
-from apps.api.providers.router import get_router
+from apps.api.providers.parallel import BatchResult
+from apps.api.providers.router import get_router, parallel_scorer
 from apps.api.providers.schemas import ItemScore, ItemToScore
 from apps.api.settings import get_settings
 from apps.api.sources import edgar, gdelt, hackernews, news_rss, reddit_rss, wikipedia, youtube
@@ -55,7 +56,6 @@ from apps.api.usage_report import youtube_used_today
 if TYPE_CHECKING:
     from apps.api.jobs import RunContext
 
-SCORE_CHUNK = 20  # items per score_items call, so one failing call loses little
 EMBED_REF = "story"
 
 
@@ -66,6 +66,7 @@ class Lead:
     primary: bool = False
     vector: list[float] | None = None
     score: ItemScore | None = None
+    scored_by: str | None = None
     extra_sources: list[SourceItem] = field(default_factory=list)
 
 
@@ -126,6 +127,13 @@ async def run_news(
     leads = drop_stale(leads, int(scoring.get("max_age_days", 30)))
     leads, exact = exact_dedupe(leads, known_source_urls(engine), known_titles(engine))
     report.counts["news_exact_duplicates"] = exact
+    leads, dropped = prefilter(leads, load_scoring().prefilter)
+    report.counts["news_prefiltered"] = sum(dropped.values())
+    if dropped:
+        ctx.log(
+            "info",
+            "Pre-filter dropped " + ", ".join(f"{n} ({rule})" for rule, n in dropped.items()),
+        )
     leads = cap_round_robin(leads, int(scoring.get("max_items_to_score", 80)))
     ctx.log("info", f"{len(leads)} unique, recent items after exact dedup ({exact} dropped)")
 
@@ -154,7 +162,7 @@ async def run_news(
                 series=lead.score.series,
                 format=lead.score.format,
                 hook=lead.score.hook,
-                scores=score_dict(lead.score),
+                scores=score_dict(lead.score) | {"scored_by": lead.scored_by},
                 notes=f"Found by @scout (run #{ctx.run_id}) via {lead.origin}.",
                 sources=[to_source(lead.item, lead.primary)]
                 + [to_source(s, False) for s in lead.extra_sources[:4]],
@@ -380,36 +388,97 @@ async def score_leads(
     report: Report,
     progress: tuple[float, float],
 ) -> None:
-    router = get_router()
+    """Score all leads with batches spread over every usable provider in parallel."""
     hint = prompts.render("scout_series_hint", series=p.series) if p.series else ""
-    chunks = [leads[i : i + SCORE_CHUNK] for i in range(0, len(leads), SCORE_CHUNK)]
-    for n, chunk in enumerate(chunks, start=1):
-        items = [
-            ItemToScore(
-                id=str(i),
-                title=lead.item.title,
-                snippet=truncate(lead.item.snippet, 400),
-                source=lead.item.source,
-                url=lead.item.url,
-            )
-            for i, lead in enumerate(chunk)
-        ]
-        try:
-            scores = await router.score_items(items, series_hint=hint)
-        except ProviderError as e:
-            report.provider_errors.append(f"score_items: {e}")
-            ctx.log("error", f"Scoring batch {n}/{len(chunks)} failed, skipped: {e}")
-            continue
-        for score in scores:
-            if score.id.isdigit() and int(score.id) < len(chunk):
-                chunk[int(score.id)].score = score
-        lo, hi = progress
-        ctx.step(f"Scored batch {n}/{len(chunks)}", lo + (hi - lo) * n / len(chunks))
-    if leads and not any(lead.score for lead in leads):
+    items = [
+        ItemToScore(
+            id=str(i),
+            title=lead.item.title,
+            snippet=truncate(lead.item.snippet, 400),
+            source=lead.item.source,
+            url=lead.item.url,
+        )
+        for i, lead in enumerate(leads)
+    ]
+    done = 0
+    lo, hi = progress
+
+    def on_batch(batch: BatchResult) -> None:
+        nonlocal done
+        done += len(batch.scores)
+        titles = "; ".join(truncate(i.title, 50) for i in batch.items[:3])
+        more = f" +{len(batch.items) - 3} more" if len(batch.items) > 3 else ""
+        ctx.log(
+            "info",
+            f"Scored {len(batch.scores)}/{len(batch.items)} items with "
+            f"{batch.provider}/{batch.model} in {batch.seconds}s: {titles}{more}",
+            {
+                "provider": batch.provider,
+                "model": batch.model,
+                "items": [i.id for i in batch.items],
+            },
+        )
+        ctx.step(f"Scored {done}/{len(items)} items", lo + (hi - lo) * done / max(len(items), 1))
+
+    def on_drop(lane: str, reason: str) -> None:
+        report.provider_errors.append(f"{lane}: {reason}")
+        ctx.log("warn", f"{lane} stopped taking scoring batches: {reason}")
+
+    outcome = await parallel_scorer().score(items, hint, on_batch=on_batch, on_lane_drop=on_drop)
+    for item_id, score in outcome.scores.items():
+        leads[int(item_id)].score = score
+        leads[int(item_id)].scored_by = outcome.scored_by[item_id]
+    by_lane: dict[str, int] = defaultdict(int)
+    for label in outcome.scored_by.values():
+        by_lane[label] += 1
+    ctx.log(
+        "info",
+        f"Scored {len(outcome.scores)}/{len(items)} items in {outcome.seconds}s ("
+        + ", ".join(f"{k}: {v}" for k, v in sorted(by_lane.items()))
+        + ")",
+    )
+    report.counts["scoring_seconds"] = int(outcome.seconds)
+    if outcome.unscored:
+        report.notes.append(f"{len(outcome.unscored)} items could not be scored")
+        ctx.log("warn", f"{len(outcome.unscored)} items could not be scored and were skipped")
+    if leads and not outcome.scores:
         raise RuntimeError(
             "Every scoring call failed; no stories could be ranked. "
-            + "; ".join(report.provider_errors[-3:])
+            + "; ".join(outcome.lane_errors[-3:])
         )
+
+
+def prefilter(leads: list[Lead], rules: dict[str, Any]) -> tuple[list[Lead], dict[str, int]]:
+    """Drop obviously irrelevant items before spending LLM calls (rules in scoring.yaml)."""
+    min_words = int(rules.get("min_title_words", 0))
+    patterns = [re.compile(p, re.I) for p in rules.get("drop_title_patterns", [])]
+    gated = tuple(rules.get("require_business_keyword_for", []))
+    keywords = (
+        re.compile(
+            r"\b(" + "|".join(re.escape(k) for k in rules.get("business_keywords", [])) + r")\b",
+            re.I,
+        )
+        if rules.get("business_keywords")
+        else None
+    )
+    kept: list[Lead] = []
+    dropped: dict[str, int] = defaultdict(int)
+    for lead in leads:
+        title = clean_title(lead.item.title)
+        if len(title.split()) < min_words:
+            dropped["too short"] += 1
+        elif any(p.search(title) for p in patterns):
+            dropped["title pattern"] += 1
+        elif (
+            keywords
+            and gated
+            and lead.origin.startswith(gated)
+            and not keywords.search(f"{title} {lead.item.snippet}")
+        ):
+            dropped["no business keyword"] += 1
+        else:
+            kept.append(lead)
+    return kept, dict(dropped)
 
 
 def score_dict(score: ItemScore) -> dict[str, Any]:
@@ -457,6 +526,7 @@ class Candidate:
     pageviews: int = 0
     summary: str = ""
     score: ItemScore | None = None
+    scored_by: str | None = None
     popular_videos: int | None = None  # None = coverage not checked
     top_video: str | None = None
     gap: float | None = None
@@ -551,7 +621,7 @@ async def run_evergreen(
     ]
     await score_leads(ctx, leads, p, report, progress=(0.82, 0.88))
     for c, lead in zip(detailed, leads, strict=True):
-        c.score = lead.score
+        c.score, c.scored_by = lead.score, lead.scored_by
     scored = sorted(
         (c for c in detailed if c.score is not None),
         key=lambda c: (total_score(score_dict(c.score)) if c.score else None) or 0.0,
@@ -622,7 +692,7 @@ async def run_evergreen(
                 series=c.score.series,
                 format=c.score.format,
                 hook=c.score.hook,
-                scores=score_dict(c.score),
+                scores=score_dict(c.score) | {"scored_by": c.scored_by},
                 gap_score=c.gap,
                 notes=note,
                 sources=[
