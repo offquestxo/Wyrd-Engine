@@ -4,7 +4,7 @@ The story engine for **wyrd.exe**: it finds, reads, and researches true business
 
 `SPEC.md` is the source of truth for what gets built; `CLAUDE.md` holds the working rules.
 
-**Status:** Phases 0–2 are complete: foundation, UI shell, and the job system (plans → approved runs with live logs, cancellation, and real quota meters on Home). Chat, Stories, Research, and Outliers show sample data (marked **SAMPLE DATA**) until their agents land in Phases 3–6. Use **Test run** on Home to watch a demo agent run end to end.
+**Status:** Phases 0–3 are complete: foundation, UI shell, the job system (plans → approved runs with live logs, cancellation, real quota meters), and **@scout** (news + evergreen gap finder, dedup, scoring) with a fully working Stories page. Chat, Research, and Outliers show sample data (marked **SAMPLE DATA**) until Phases 4–6. Start a scout run with **Run @scout** on the Stories page or ⌘K.
 
 ## Requirements
 

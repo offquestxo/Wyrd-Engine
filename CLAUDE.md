@@ -58,8 +58,8 @@ You are building and maintaining the wyrd.exe story engine: a local app that fin
   Config, SQLite schema + FTS5, provider router (retries, fallback, JSON repair, usage
   logging, auth-failure cooldown), 12 source CLIs, FastAPI health/key-status endpoints.
 - Provider status (2026-10-05): all six connected. Groq ✅ (primary: scoring/parsing), Gemini ✅ via
-  OAuth/ADC (`GEMINI_AUTH=oauth`; primary: extraction/outliers; embed fallback), Mistral ✅ (first
-  fallback for extraction/outliers), NVIDIA ✅ (embed/second-opinion primary), OpenRouter ✅, YouTube ✅.
+  OAuth/ADC (`GEMINI_AUTH=oauth`; primary: extraction/outliers; embed fallback), Mistral ⚠️ (key valid but
+  workspace quota is 0 req/min — blocked; first fallback for extraction/outliers once fixed), NVIDIA ✅ (embed/second-opinion primary), OpenRouter ✅, YouTube ✅.
   Gemini API keys (`AQ.`) are rejected; OAuth login expires ~weekly in Testing mode (README).
 - Notion connector authorized in the owner's Claude account — for Phase 7 database setup only; the
   app's sync uses NOTION_TOKEN/NOTION_DATABASE_ID (docs/decisions.md).
@@ -68,4 +68,8 @@ You are building and maintaining the wyrd.exe story engine: a local app that fin
 - Phase 2 (jobs, runs, dashboard): **done**, reviewed. Plans → approved runs (`plans.py`),
   DB-backed runner with cancellation (`jobs.py`), live logs over SSE, run detail, real quota meters
   (`/api/usage`), `@demo` test agent. Home, run detail, and live panel use real data.
-- Phase 3 (@scout): in progress.
+- Phase 3 (@scout): **done**, awaiting review. News + evergreen gap finder (`agents/scout.py`), dedup
+  (`agents/dedup.py`), stories repository + API (`stories.py`), real Stories page (table/board/drawer),
+  Run @scout form → plan card with YouTube estimate. Verified live (news: 10 stories; gap finder:
+  20 search calls / 40 units). Mistral account has 0 req/min quota → blocked until the owner fixes it.
+- Next: Phase 4 (@outlier) after "proceed".

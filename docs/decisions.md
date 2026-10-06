@@ -150,3 +150,51 @@ Choices not covered by SPEC.md, newest last. Each keeps v1 simple and v2 easy.
 ## Notion connector (note for Phase 7)
 
 The owner has authorized the Notion connector in their Claude account. In Phase 7 it can be used, interactively from this Claude session, to **create and configure the stories database** (properties: Title, Status, Series, Format, Hook, Scores, Gap Score, Sources, Updated). The **app's own sync** (`notion_sync.py`, the "Sync now" button, auto-sync) still talks to the Notion API with `NOTION_TOKEN` and `NOTION_DATABASE_ID` from `.env`. The app doesn't depend on Claude's connector, so it works without Claude.
+
+## Phase 3: @scout (2026-10-05)
+
+**News pipeline:**
+1. Fetch every configured feed and query concurrently. Per-host pacing still applies: GDELT 1 per 5 s, Reddit 1 per 2 s, SEC ≤10/s. With a `topic`, Google News uses `<topic> <suffix>` queries (`sources.yaml` `topic_query_suffixes`), the other sources search the topic itself, and press feeds are filtered to items that mention it.
+2. Drop items older than `max_age_days` (30).
+3. Exact dedup on normalized URLs (tracking params, `www.`, fragments and trailing slashes stripped) and on headlines with the " - Publisher" suffix removed, against this run and against saved stories' sources and titles. Primary sources (SEC, DOJ, EDGAR) sort first, so they win over re-posts. A matching headline from another outlet is kept as an **extra source** rather than thrown away.
+4. Cap at `max_items_to_score` (80), taken round-robin across feeds so no single feed dominates.
+5. Semantic dedup with embeddings (cosine ≥ `scoring.yaml` `dedup.embedding_cosine_threshold`), against the other new items and against saved story vectors **of the same model**. If embedding fails, or providers switch models mid-run, semantic dedup is skipped and logged, and exact dedup still applies.
+6. Score in chunks of 20, so one failed provider call loses at most 20 items. The run fails only if *every* scoring call fails.
+7. Save the top `limit` by weighted rubric score (`scoring.yaml` weights; stored as `scores.total`) with status `Inbox`, their sources (primary/secondary plus a short excerpt), and an embedding for future dedup.
+
+**Gap finder:**
+1. Crawl categories (`per_category`). Batch-fetch article lengths (50 per request), and fetch references, summary and pageviews only for the `max_articles_detailed` longest articles, to keep Wikipedia calls bounded.
+2. Pre-score those articles, then run a YouTube coverage check for the top `top_n_for_youtube_check`: one `search.list` ("<name> company story", 10 results) plus one `videos.list` for view counts. Each check costs 2 units and **1 search call**.
+3. **Budget:** checks = min(top N, search calls left today minus `search_calls_reserve`, units left minus `units_reserve` ÷ 2). Both limits come from `provider_usage` since today's Pacific-midnight reset; each YouTube call already logs itself there. Checking stops early on a quota/403 error. Popular coverage = videos ≥ `youtube_view_threshold` views whose titles contain the company name.
+4. Gap score (0–10) = weighted quality + richness + low coverage (`scoring.yaml`). Richness = 50% references, 25% length, 25% log-pageviews, each normalized to a configurable "full" value. Only coverage-checked articles get a gap score and are saved; the run notes say when the budget limited checks.
+
+**`both` mode** splits `limit` between news (rounded up) and evergreen.
+
+**Plan cards show an estimate:** agents can register `estimate(params)`. Scout's is the upper bound of YouTube search calls and units (0 for news), shown on the plan card next to the daily caps.
+
+**`series`** adds `prompts/scout_series_hint.md` to the scoring prompt (prompt text stays in prompts/), and stories in that series rank first. Scores also return an optional `company`.
+
+**Stories page is real:**
+- New endpoints: `GET /api/stories` (filters plus FTS5 search), `GET /api/stories/{id}` (sources, dossier versions), and `PATCH /api/stories/{id}` (status/series/format/notes/hook; publishes `story.changed`).
+- The board's drag-and-drop updates status optimistically, then confirms with the server.
+- **Run @scout** (Stories page and ⌘K) opens a parameter form, then the plan card; nothing runs before approval.
+- The scout run summary is stored in the run result. Posting it to chat comes with the orchestrator in Phase 5.
+
+**Live verification (2026-10-05):**
+- **News run** (`mode=news, limit=10`): fetched 245 items from 15 feeds and queries, dropped 10 exact and 5 semantic duplicates (NVIDIA embeddings), scored 75, and saved 10 stories with sources, hooks and series. Reddit returned 429 for two subreddits (logged and skipped), so `www.reddit.com` pacing went from 2 s to 7 s.
+- **Gap finder** (`mode=evergreen`): 171 articles from 5 categories, 60 read and pre-scored, and **20 YouTube coverage checks = 20 search calls / 40 units** (today's usage went from 0 to 20 searches, within 100 − 10 reserve). It saved the 4 highest gap scores, e.g. the British Post Office scandal at 9.21 with no popular videos. Blockbuster (6 popular videos) and Circuit City (3) ranked lower.
+
+**Fixes from the live runs:**
+- The plan-card estimate capped YouTube checks at `limit`, but the run checks the top N (20). The estimate now matches the run, and a test enforces it.
+- Google News "snippets" that just repeat the headline are no longer stored as excerpts.
+- Board drag-and-drop carries the story id in `dataTransfer` instead of relying on React state.
+
+**Mistral has zero quota on this account.** Its chat responses carry `x-ratelimit-limit-req-minute: 0`, so every call is a 429. The key itself is valid, which is why the old models-list connection test passed. Now:
+- a 429 with a limit of 0 is treated as a **block** (`ProviderError.block`): Mistral is skipped for the auth cooldown with a message naming the limits page, instead of being retried;
+- Mistral's connection test is a 1-token chat call, so it reports this honestly.
+
+The owner needs to activate the free Experiment plan (or check limits) at `admin.mistral.ai/plateforme/limits`.
+
+**Scoring speed is the bottleneck: 8 minutes for 75 items.** Groq's free tier allows 8K tokens per minute, so after the first batch it's near its limit and the router uses fallbacks. Gemini returned 500/503 ("high demand") during the runs, and Mistral is blocked (above), so NVIDIA (~30 s per batch) did most of the work. Every item was still scored. Ways to speed it up: a working Mistral quota, a paid Groq tier, or lowering `max_items_to_score`.
+
+**Scout hooks are leads, not research.** They're generated from the headline and snippet with "don't invent facts" in the prompt, but they're unverified. Verified facts only come from @researcher dossiers (Phase 6).
