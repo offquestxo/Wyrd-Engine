@@ -29,8 +29,12 @@ def _isolate_settings(
         "GEMINI_API_KEY",
         "NVIDIA_API_KEY",
         "YOUTUBE_API_KEY",
+        "MISTRAL_API_KEY",
+        "OPENROUTER_API_KEY",
         "COURTLISTENER_TOKEN",
         "SEC_USER_AGENT",
+        "GEMINI_AUTH",
+        "GOOGLE_CLOUD_QUOTA_PROJECT",
     ):
         monkeypatch.setenv(name, "")
     get_settings.cache_clear()

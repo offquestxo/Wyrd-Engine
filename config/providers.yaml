@@ -3,9 +3,10 @@
 # Limits are per model unless noted. Use null when a limit is unknown/not applicable.
 # Last verified: 2026-10-05.
 #
-# Availability (2026-10-05): Groq, NVIDIA, Mistral, OpenRouter, YouTube connect. Gemini is
-# unavailable (AQ.-format key rejected; OAuth not set up) and stays in routes, skipped: a provider
-# whose key returns 401/403 is skipped for auth_failure_cooldown_s, one with no credentials always.
+# Availability (2026-10-05): all six providers connect. Gemini authenticates with OAuth
+# (GEMINI_AUTH=oauth, gcloud Application Default Credentials) because its AQ.-format API keys are
+# rejected. A provider whose credentials return 401/403 is skipped for auth_failure_cooldown_s;
+# one with no credentials is skipped until they exist.
 
 providers:
   groq:
@@ -48,8 +49,7 @@ providers:
         extra: { thinking_config: { thinking_level: MINIMAL } }
         limits: { rpm: 30, rpd: 14400, tpm: 16000, tpd: null }
       embed:
-        # Docs disagree: models page says gemini-embedding-2-preview, embeddings guide
-        # uses gemini-embedding-2. Confirm with `make check-models` once the key works.
+        # Live list (2026-10-05) has gemini-embedding-2 and gemini-embedding-2-preview; use stable.
         id: gemini-embedding-2
         dimensions: 2048
         limits: { rpm: 100, rpd: 1000, tpm: 30000, tpd: null }
@@ -141,8 +141,8 @@ auth_failure_cooldown_s: 900
 
 # Task → ordered list of provider/model aliases (first = primary, rest = fallbacks).
 tasks:
-  # Groq is primary for scoring/parsing. Gemini leads where it was primary before and is
-  # skipped while unavailable, so the effective order is the one after it. Reorder freely.
+  # Groq is primary for fast scoring/parsing; Gemini for long documents and outlier analysis,
+  # with Mistral as first fallback. Unavailable providers are skipped automatically.
   score_items:
     - { provider: groq, model: fast }
     - { provider: gemini, model: gemma }
@@ -159,20 +159,20 @@ tasks:
     - { provider: gemini, model: lite }
     - { provider: mistral, model: long }
     - { provider: nvidia, model: chat }
-  extract_from_document_deep:      # @researcher depth=deep only
+  extract_from_document_deep:      # @researcher depth=deep only (Flash: 20 requests/day)
     - { provider: gemini, model: flash }
     - { provider: mistral, model: long }
     - { provider: nvidia, model: chat }
   analyze_outliers:
     - { provider: gemini, model: lite }
-    - { provider: groq, model: smart }
     - { provider: mistral, model: long }
     - { provider: nvidia, model: chat }
+    - { provider: groq, model: smart }
   second_opinion:
     - { provider: nvidia, model: chat }
     - { provider: mistral, model: long }
     - { provider: gemini, model: lite }
   embed:
     - { provider: nvidia, model: embed }
-    - { provider: mistral, model: embed }
     - { provider: gemini, model: embed }
+    - { provider: mistral, model: embed }

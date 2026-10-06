@@ -33,6 +33,19 @@ SCOPES = [
     "https://www.googleapis.com/auth/cloud-platform",
     "https://www.googleapis.com/auth/generative-language.retriever",
 ]
+LOGIN_CMD = (
+    "gcloud auth application-default login "
+    "--client-id-file=$HOME/.config/wyrd/client_secret.json "
+    "--scopes=https://www.googleapis.com/auth/cloud-platform,"
+    "https://www.googleapis.com/auth/generative-language.retriever"
+)
+RELOGIN = (
+    "Google OAuth credentials expired or were revoked. Rerun `" + LOGIN_CMD + "`, then click "
+    "Reload .env in Settings. (While the OAuth app is in Testing mode on the consent screen, "
+    "Google expires this login about once a week.)"
+)
+RELOAD_ADC_EVERY_S = 30.0
+
 NOT_SET_UP = (
     "GEMINI_AUTH=oauth, but no Application Default Credentials were found "
     "(`gcloud auth application-default print-access-token` fails). Run the "
@@ -75,17 +88,32 @@ class GeminiOAuthProvider:
         self._timeout = timeout_s
         self._client = client
         self._lock = asyncio.Lock()
+        self._loader = loader
+        self._quota_override = quota_project
+        self._creds: Credentials | None = None
+        self._quota_project = quota_project
+        self._loaded_at = 0.0
+        self._load()
+
+    def _load(self) -> None:
+        """(Re)read ADC from disk — picks up a fresh `gcloud auth application-default login`."""
+        self._loaded_at = time.monotonic()
         try:
-            self._creds: Credentials | None
-            self._creds, project = loader()
+            self._creds, project = self._loader()
         except DefaultCredentialsError:
             self._creds, project = None, None
         quota = getattr(self._creds, "quota_project_id", None) if self._creds else None
-        self._quota_project = quota_project or quota or project or ""
+        self._quota_project = self._quota_override or quota or project or ""
 
     @property
     def configured(self) -> bool:
+        if self._creds is None and time.monotonic() - self._loaded_at > RELOAD_ADC_EVERY_S:
+            self._load()  # the owner may have logged in since startup
         return self._creds is not None
+
+    @property
+    def quota_project(self) -> str:
+        return self._quota_project
 
     @property
     def unconfigured_detail(self) -> str:
@@ -97,16 +125,26 @@ class GeminiOAuthProvider:
         async with self._lock:
             if not self._creds.valid:
                 try:
-                    request = google.auth.transport.requests.Request()
-                    await asyncio.to_thread(self._creds.refresh, request)
-                except RefreshError as e:
-                    raise ProviderError(
-                        self.name, f"OAuth token refresh failed: {e}", status=401
-                    ) from e
+                    await self._refresh()
+                except RefreshError:
+                    # The owner may have re-logged in since we loaded the file: reload once.
+                    self._load()
+                    try:
+                        if self._creds is None:
+                            raise ProviderError(self.name, NOT_SET_UP, status=401) from None
+                        await self._refresh()
+                    except RefreshError as e:
+                        raise ProviderError(self.name, f"{RELOGIN} ({e})", status=401) from e
+        assert self._creds is not None
         headers = {"Authorization": f"Bearer {self._creds.token}"}
         if self._quota_project:
             headers["x-goog-user-project"] = self._quota_project
         return headers
+
+    async def _refresh(self) -> None:
+        assert self._creds is not None
+        request = google.auth.transport.requests.Request()
+        await asyncio.to_thread(self._creds.refresh, request)
 
     async def _request(self, method: str, path: str, json: dict[str, Any] | None = None) -> Any:
         headers = await self._headers()
@@ -122,6 +160,8 @@ class GeminiOAuthProvider:
         finally:
             if self._client is None:
                 await client.aclose()
+        if resp.status_code == 401:
+            raise ProviderError(self.name, f"HTTP 401: {RELOGIN}", status=401)
         if resp.status_code >= 400:
             raise ProviderError(
                 self.name,

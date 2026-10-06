@@ -131,3 +131,22 @@ Choices not covered by SPEC.md, newest last. Each keeps v1 simple and v2 easy.
 **Timestamps** use a `UTCDateTime` column type. SQLite drops timezones, so values used to come back naive, and browsers read them as local time.
 
 **Frontend:** Home, run detail and the live panel use real data. SWR refetches (throttled) on `run.*` and `plan.*` SSE events, and the run page appends `run.log` lines without refetching. Cancel is available on the run page and on each active run on Home. Chat, Stories, Research and Outliers still use sample data until their phases.
+
+## Gemini via OAuth works; routes restored (2026-10-05)
+
+**What worked:** the owner completed the OAuth setup, now written up step by step in the README. The steps: Desktop OAuth client JSON in `~/.config/wyrd/`, themselves as a Testing-mode test user, Service Usage Consumer role, Cloud Resource Manager API enabled for `set-quota-project`, `GEMINI_AUTH=oauth` with `GEMINI_API_KEY` commented out. `make check-providers` shows all six providers connected, with Gemini `connected via OAuth` / `oauth (ADC)`. The README has a troubleshooting table for the errors hit on the way (`access_denied`, missing `serviceusage.services.use`, "default credentials not found", `auth: api_key` when the `GEMINI_AUTH` line is missing).
+
+**How the engine uses ADC:** `google.auth.default()` (google-auth library). It never shells out to `gcloud`, so gcloud doesn't need to be on the app's PATH. Tokens refresh on expiry using the ADC refresh token. The quota project comes from the ADC file's `quota_project_id` (overridable with `GOOGLE_CLOUD_QUOTA_PROJECT`) and is sent as `x-goog-user-project`; verified on the live request.
+
+**Expired or missing login:** a refresh failure (e.g. `invalid_grant`, which Testing-mode apps hit about weekly) first re-reads the ADC file, in case the owner just re-logged in. If it still fails, the error tells the owner to rerun `gcloud auth application-default login` and mentions the weekly expiry. If the ADC file is missing, the provider re-checks every 30 s, so a new login is picked up without a restart. These messages appear:
+- in Settings: the Gemini row becomes `GEMINI_AUTH=oauth`, showing ADC status, the quota project, and a note;
+- once per run in the run log, when Gemini is skipped for missing or rejected credentials;
+- via the router's existing auth cooldown.
+
+**Models checked against the live list** (`make check-models`, 61 Gemini models): every configured ID exists. Both `gemini-embedding-2` and `gemini-embedding-2-preview` are listed; the stable `gemini-embedding-2` is kept, and 2048-dim output works.
+
+**Routes:** Gemini Flash-Lite is primary for `extract_from_document` and `analyze_outliers`, with Mistral as first fallback, then NVIDIA (and Groq last for outliers). Flash is primary for deep extraction. Gemini is the first fallback for `embed` (after NVIDIA). Groq stays primary for `score_items` and `parse_mention`, with Gemma second. Verified live: Gemini served `extract_from_document` and `analyze_outliers` (`provider_usage` rows), and its calls show on the Gemini quota meter against the free-tier limits in `providers.yaml`.
+
+## Notion connector (note for Phase 7)
+
+The owner has authorized the Notion connector in their Claude account. In Phase 7 it can be used, interactively from this Claude session, to **create and configure the stories database** (properties: Title, Status, Series, Format, Hook, Scores, Gap Score, Sources, Updated). The **app's own sync** (`notion_sync.py`, the "Sync now" button, auto-sync) still talks to the Notion API with `NOTION_TOKEN` and `NOTION_DATABASE_ID` from `.env`. The app doesn't depend on Claude's connector, so it works without Claude.

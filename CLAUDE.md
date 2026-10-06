@@ -57,13 +57,15 @@ You are building and maintaining the wyrd.exe story engine: a local app that fin
 - Phase 0 (foundation): **done**, pushed to github.com/offquestxo/Wyrd-Engine (private).
   Config, SQLite schema + FTS5, provider router (retries, fallback, JSON repair, usage
   logging, auth-failure cooldown), 12 source CLIs, FastAPI health/key-status endpoints.
-- Provider status (2026-10-05): Groq ✅ (primary for scoring/parsing), Mistral ✅ (primary for
-  extraction/outliers), NVIDIA ✅, OpenRouter ✅, YouTube ✅, CourtListener token set.
-  **Gemini: unavailable** — `AQ.` key rejected (401); OAuth mode (`GEMINI_AUTH=oauth`) is built
-  but this machine has no gcloud ADC credentials. Gemini stays in routes, skipped. See docs/decisions.md.
+- Provider status (2026-10-05): all six connected. Groq ✅ (primary: scoring/parsing), Gemini ✅ via
+  OAuth/ADC (`GEMINI_AUTH=oauth`; primary: extraction/outliers; embed fallback), Mistral ✅ (first
+  fallback for extraction/outliers), NVIDIA ✅ (embed/second-opinion primary), OpenRouter ✅, YouTube ✅.
+  Gemini API keys (`AQ.`) are rejected; OAuth login expires ~weekly in Testing mode (README).
+- Notion connector authorized in the owner's Claude account — for Phase 7 database setup only; the
+  app's sync uses NOTION_TOKEN/NOTION_DATABASE_ID (docs/decisions.md).
 - Phase 1 (UI shell): **done**. All pages plus Settings (real data), command palette, live panel over
   SSE, PWA. Chat/Stories/Research/Outliers use sample data (`apps/web/lib/mock.ts`).
-- Phase 2 (jobs, runs, dashboard): **done**, awaiting review. Plans → approved runs (`plans.py`),
+- Phase 2 (jobs, runs, dashboard): **done**, reviewed. Plans → approved runs (`plans.py`),
   DB-backed runner with cancellation (`jobs.py`), live logs over SSE, run detail, real quota meters
   (`/api/usage`), `@demo` test agent. Home, run detail, and live panel use real data.
-- Next: Phase 3 (@scout) after "proceed".
+- Phase 3 (@scout): in progress.
