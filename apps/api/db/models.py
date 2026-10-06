@@ -110,6 +110,10 @@ class Dossier(SQLModel, table=True):
     sources_json: list[dict[str, Any]] | None = Field(default=None, sa_type=JSON)
     second_opinion: dict[str, Any] | None = Field(default=None, sa_type=JSON)
     created_at: datetime = Field(default_factory=utcnow, sa_type=UTCDateTime)
+    data: dict[str, Any] | None = Field(default=None, sa_type=JSON)
+    checks: dict[str, Any] | None = Field(default=None, sa_type=JSON)
+    run_id: int | None = Field(default=None, foreign_key="agent_runs.id")
+    export_path: str | None = None
 
 
 class Channel(SQLModel, table=True):
