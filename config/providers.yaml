@@ -141,6 +141,11 @@ retry:
 # the router tries the other providers in the route first.
 near_limit_ratio: 0.8
 
+# Routes ordered by daily headroom: the model with the largest share of its daily request
+# limit (rpd) left goes first; config order breaks ties; models without a daily limit go after.
+# Used for extraction, where Gemini models have very different daily limits (Flash: 20/day).
+headroom_tasks: [extract_from_document, extract_from_document_deep]
+
 # After a 401/403 (bad or unsupported key), skip that provider for this long instead of
 # failing every call. It is retried automatically afterwards, and immediately on restart
 # (e.g. after you put a new key in .env).
@@ -181,6 +186,7 @@ tasks:
     - { provider: nvidia, model: chat }
   extract_from_document_deep:      # @researcher depth=deep only (Flash: 20 requests/day)
     - { provider: gemini, model: flash }
+    - { provider: gemini, model: lite }
     - { provider: mistral, model: long }
     - { provider: nvidia, model: chat }
   analyze_outliers:

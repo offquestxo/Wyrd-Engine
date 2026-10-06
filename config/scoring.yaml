@@ -93,3 +93,41 @@ series:
   - Everyday Genius
   - Comebacks
   - Recent Collapses
+
+research:
+  # @researcher (SPEC §6.3). Claude is the expensive part: each depth has a hard budget of
+  # Claude turns (one turn = one model call, usually one tool call). The run is stopped at the
+  # budget; the researcher is told its budget and saves before it runs out.
+  depths:
+    quick:
+      claude_turns: 20
+      sources: [wikipedia, edgar, news_rss]
+      extract_deep: false
+    standard:
+      claude_turns: 40
+      sources: [wikipedia, edgar, wayback, courtlistener, internet_archive, loc_newspapers, news_rss, yahoo]
+      extract_deep: false
+    deep:
+      claude_turns: 70
+      sources: [wikipedia, edgar, wayback, courtlistener, internet_archive, loc_newspapers, news_rss, gdelt, hackernews, reddit_rss, yahoo, youtube]
+      extract_deep: true             # extract_from_document_deep route (Gemini Flash: 20/day)
+  model: sonnet                      # claude --model for research runs
+  effort: medium
+  run_timeout_s: 1800                # whole run, wall clock
+  # Copyright: excerpts are short supporting snippets. Longer ones are cut to this many words
+  # (a prefix of a real quote is still a real quote) before the excerpt check.
+  excerpt_max_words: 40
+  # Sources on these domains are marked primary in Sources and sources.json (filings, court
+  # records, archived company pages, historical newspapers, archived documents).
+  primary_domains:
+    - sec.gov
+    - courtlistener.com
+    - web.archive.org
+    - archive.org
+    - loc.gov
+    - chroniclingamerica.loc.gov
+    - justice.gov
+    - uscourts.gov
+    - ftc.gov
+  source_text_max_chars: 3000000     # cap on a fetched document kept for the excerpt check
+  youtube_searches_max: 2            # per run (deep only); each costs 1 unit + 1 of 100 daily searches

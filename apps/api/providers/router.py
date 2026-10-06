@@ -17,7 +17,7 @@ from collections import deque
 from collections.abc import Awaitable, Callable, Sequence
 from contextvars import ContextVar
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any, TypeVar
 
@@ -238,7 +238,30 @@ class Router:
                     task, "skip", step.provider, "near free-tier limit; trying others first"
                 )
             usable.append((near, step))
+        if task in self.config.headroom_tasks:
+            # Most headroom first; no daily limit sorts last; sort() is stable (ties keep
+            # config order).
+            def headroom(pair: tuple[bool, RouteStep]) -> tuple[bool, float]:
+                left = self._daily_left(pair[1])
+                return pair[0], -(left if left is not None else -1.0)
+
+            usable.sort(key=headroom)
+            return [step for _, step in usable]
         return [step for _, step in sorted(usable, key=lambda pair: pair[0])]
+
+    def _daily_left(self, step: RouteStep) -> float | None:
+        """Share of the model's daily request limit still unused (None = no daily limit)."""
+        model = self.config.model(step.provider, step.model)
+        if self.usage is None or not model.limits.rpd:
+            return None
+        try:
+            reqs, _, _ = self.usage.totals(
+                step.provider, model.id, datetime.now(UTC) - timedelta(days=1)
+            )
+        except Exception:
+            log.exception("usage check failed")
+            return None
+        return max(0.0, 1 - reqs / model.limits.rpd)
 
     def auth_error(self, provider: str) -> str | None:
         return self._auth_errors.get(provider) if self.auth_blocked(provider) else None
