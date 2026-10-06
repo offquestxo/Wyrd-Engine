@@ -24,6 +24,7 @@ class ProviderError(Exception):
         retry_after_s: float | None = None,
         block: bool = False,
     ) -> None:
+        message = " ".join(message.split())  # raw JSON error bodies → one readable line
         super().__init__(f"{provider}: {message}")
         self.provider = provider
         self.status = status

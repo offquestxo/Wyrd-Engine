@@ -18,10 +18,16 @@ providers:
     models:
       fast:
         id: openai/gpt-oss-20b
+        # gpt-oss reasons before answering; at default effort the reasoning can break JSON mode
+        # ("json_validate_failed"). Low effort fixed it (2026-10-05): 10 items in ~1 s.
+        extra: { reasoning_effort: low }
         max_request_tokens: 6000     # 8K TPM free tier
         limits: { rpm: 30, rpd: 1000, tpm: 8000, tpd: 200000 }
       smart:
         id: openai/gpt-oss-120b
+        # gpt-oss reasons before answering; at default effort the reasoning can break JSON mode
+        # ("json_validate_failed"). Low effort fixed it (2026-10-05): 10 items in ~1 s.
+        extra: { reasoning_effort: low }
         max_request_tokens: 6000
         limits: { rpm: 30, rpd: 1000, tpm: 8000, tpd: 200000 }
 
@@ -138,6 +144,19 @@ near_limit_ratio: 0.8
 # failing every call. It is retried automatically afterwards, and immediately on restart
 # (e.g. after you put a new key in .env).
 auth_failure_cooldown_s: 900
+
+# Parallel batching: score_items batches are spread over every usable provider in its route at
+# once, each kept under its own rpm/tpm (and daily) limits. Providers in last_resort only take
+# work after all the others have dropped out.
+parallel:
+  score_items:
+    last_resort: [openrouter]
+    default_batch_tokens: 6000
+    safety_ratio: 0.9
+    max_failures_per_lane: 2
+    workers: { nvidia: 2 }
+    max_item_attempts: 3
+    hedge_after_s: 30         # when the queue is empty, idle providers re-run slow batches
 
 # Task → ordered list of provider/model aliases (first = primary, rest = fallbacks).
 tasks:
