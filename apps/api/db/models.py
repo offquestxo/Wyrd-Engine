@@ -9,12 +9,27 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
-from sqlalchemy import JSON, LargeBinary
+from sqlalchemy import JSON, DateTime, LargeBinary, TypeDecorator
 from sqlmodel import Field, SQLModel
 
 
 def utcnow() -> datetime:
     return datetime.now(UTC)
+
+
+class UTCDateTime(TypeDecorator[datetime]):
+    """Stores UTC; always returns timezone-aware UTC datetimes (SQLite drops tzinfo)."""
+
+    impl = DateTime
+    cache_ok = True
+
+    def process_bind_param(self, value: datetime | None, dialect: Any) -> datetime | None:
+        if value is not None and value.tzinfo is not None:
+            value = value.astimezone(UTC).replace(tzinfo=None)
+        return value
+
+    def process_result_value(self, value: datetime | None, dialect: Any) -> datetime | None:
+        return value.replace(tzinfo=UTC) if value is not None else None
 
 
 class StoryStatus(StrEnum):
@@ -27,6 +42,16 @@ class StoryStatus(StrEnum):
     EDITING = "Editing"
     PUBLISHED = "Published"
     ARCHIVED = "Archived"
+
+
+class StepStatus(StrEnum):
+    PENDING = "pending"
+    QUEUED = "queued"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+    SKIPPED = "skipped"
 
 
 class PlanStatus(StrEnum):
@@ -59,10 +84,10 @@ class Story(SQLModel, table=True):
     gap_score: float | None = None
     outlier_ref: int | None = Field(default=None, foreign_key="videos.id")
     notes: str | None = None
-    created_at: datetime = Field(default_factory=utcnow)
-    updated_at: datetime = Field(default_factory=utcnow)
+    created_at: datetime = Field(default_factory=utcnow, sa_type=UTCDateTime)
+    updated_at: datetime = Field(default_factory=utcnow, sa_type=UTCDateTime)
     notion_page_id: str | None = None
-    notion_synced_at: datetime | None = None
+    notion_synced_at: datetime | None = Field(default=None, sa_type=UTCDateTime)
 
 
 class StorySource(SQLModel, table=True):
@@ -84,7 +109,7 @@ class Dossier(SQLModel, table=True):
     markdown: str
     sources_json: list[dict[str, Any]] | None = Field(default=None, sa_type=JSON)
     second_opinion: dict[str, Any] | None = Field(default=None, sa_type=JSON)
-    created_at: datetime = Field(default_factory=utcnow)
+    created_at: datetime = Field(default_factory=utcnow, sa_type=UTCDateTime)
 
 
 class Channel(SQLModel, table=True):
@@ -94,7 +119,7 @@ class Channel(SQLModel, table=True):
     channel_id: str | None = None
     name: str | None = None
     uploads_playlist_id: str | None = None
-    last_scanned_at: datetime | None = None
+    last_scanned_at: datetime | None = Field(default=None, sa_type=UTCDateTime)
 
 
 class Video(SQLModel, table=True):
@@ -103,7 +128,7 @@ class Video(SQLModel, table=True):
     channel_id: int = Field(foreign_key="channels.id")
     video_id: str = Field(unique=True)
     title: str
-    published_at: datetime | None = None
+    published_at: datetime | None = Field(default=None, sa_type=UTCDateTime)
     duration_s: int | None = None
     is_short: bool = False
     views: int | None = None
@@ -118,8 +143,8 @@ class Chat(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     title: str
     claude_session_id: str | None = None
-    created_at: datetime = Field(default_factory=utcnow)
-    updated_at: datetime = Field(default_factory=utcnow)
+    created_at: datetime = Field(default_factory=utcnow, sa_type=UTCDateTime)
+    updated_at: datetime = Field(default_factory=utcnow, sa_type=UTCDateTime)
 
 
 class Message(SQLModel, table=True):
@@ -131,7 +156,7 @@ class Message(SQLModel, table=True):
     metadata_: dict[str, Any] | None = Field(
         default=None, sa_type=JSON, sa_column_kwargs={"name": "metadata"}
     )
-    created_at: datetime = Field(default_factory=utcnow)
+    created_at: datetime = Field(default_factory=utcnow, sa_type=UTCDateTime)
 
 
 class Plan(SQLModel, table=True):
@@ -140,8 +165,8 @@ class Plan(SQLModel, table=True):
     chat_id: int | None = Field(default=None, foreign_key="chats.id")
     status: str = PlanStatus.PENDING.value
     summary: str | None = None
-    created_at: datetime = Field(default_factory=utcnow)
-    decided_at: datetime | None = None
+    created_at: datetime = Field(default_factory=utcnow, sa_type=UTCDateTime)
+    decided_at: datetime | None = Field(default=None, sa_type=UTCDateTime)
 
 
 class PlanStep(SQLModel, table=True):
@@ -161,17 +186,21 @@ class AgentRun(SQLModel, table=True):
     agent: str
     params: dict[str, Any] | None = Field(default=None, sa_type=JSON)
     status: str = RunStatus.QUEUED.value
-    started_at: datetime | None = None
-    finished_at: datetime | None = None
+    started_at: datetime | None = Field(default=None, sa_type=UTCDateTime)
+    finished_at: datetime | None = Field(default=None, sa_type=UTCDateTime)
     result: dict[str, Any] | None = Field(default=None, sa_type=JSON)
     error: str | None = None
+    current_step: str | None = None
+    progress: float | None = None  # 0..1 when the agent reports it
+    plan_id: int | None = Field(default=None, foreign_key="plans.id")
+    created_at: datetime | None = Field(default_factory=utcnow, sa_type=UTCDateTime)
 
 
 class RunLog(SQLModel, table=True):
     __tablename__ = "run_logs"
     id: int | None = Field(default=None, primary_key=True)
     run_id: int = Field(foreign_key="agent_runs.id")
-    ts: datetime = Field(default_factory=utcnow)
+    ts: datetime = Field(default_factory=utcnow, sa_type=UTCDateTime)
     level: str = "info"
     message: str
     data: dict[str, Any] | None = Field(default=None, sa_type=JSON)
@@ -189,7 +218,8 @@ class ProviderUsage(SQLModel, table=True):
     latency_ms: int = 0
     ok: bool
     error: str | None = None
-    ts: datetime = Field(default_factory=utcnow)
+    fallback: bool = False
+    ts: datetime = Field(default_factory=utcnow, sa_type=UTCDateTime)
 
 
 class Setting(SQLModel, table=True):
