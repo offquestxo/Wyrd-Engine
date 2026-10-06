@@ -17,6 +17,7 @@ def test_migrations_are_idempotent(tmp_path: Path) -> None:
         "0002_fts.sql",
         "0003_runs_progress.sql",
         "0004_outliers.sql",
+        "0005_chat.sql",
     ]
     assert migrate_path(db) == []
 

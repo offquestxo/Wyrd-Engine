@@ -139,9 +139,19 @@ class UsageConfig(BaseModel):
     day_reset_timezone: str = "America/Los_Angeles"
 
 
+class OrchestratorConfig(BaseModel):
+    model: str = "sonnet"
+    effort: str | None = "low"
+    workdir: str = "~/.local/share/wyrd/orchestrator"
+    turn_timeout_s: float = Field(default=300, gt=0)
+    daily_soft_cap: int = Field(default=40, ge=1)
+    warn_ratio: float = Field(default=0.8, gt=0, le=1)
+
+
 class EngineConfig(BaseModel):
     jobs: JobsConfig = Field(default_factory=JobsConfig)
     usage: UsageConfig = Field(default_factory=UsageConfig)
+    orchestrator: OrchestratorConfig = Field(default_factory=OrchestratorConfig)
 
 
 def load_engine(config_dir: Path | None = None) -> EngineConfig:

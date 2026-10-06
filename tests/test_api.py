@@ -189,7 +189,7 @@ def test_usage_endpoint_lists_every_provider(client: TestClient) -> None:
     with client:
         meters = {m["provider"]: m for m in client.get("/api/usage").json()["meters"]}
     assert {"groq", "gemini", "nvidia", "mistral", "openrouter", "youtube", "claude"} <= set(meters)
-    assert meters["youtube"]["limit"] == 10000 and meters["claude"]["unit"] == "runs"
+    assert meters["youtube"]["limit"] == 10000 and meters["claude"]["unit"] == "calls"
 
 
 def test_stories_endpoints(client: TestClient) -> None:

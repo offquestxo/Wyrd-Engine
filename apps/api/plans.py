@@ -7,6 +7,8 @@ previous one succeeds. A failed or cancelled step skips the rest.
 
 from __future__ import annotations
 
+import logging
+from collections.abc import Callable
 from typing import Any
 
 from pydantic import BaseModel, ValidationError
@@ -26,6 +28,8 @@ from apps.api.db.models import (
 from apps.api.events import EventBus
 from apps.api.jobs import JobRunner
 from apps.api.settings_store import auto_approve_key, get_setting
+
+log = logging.getLogger(__name__)
 
 
 class PlanError(ValueError):
@@ -66,12 +70,36 @@ def _safe_estimate(agent: str, params: dict[str, Any]) -> dict[str, Any] | None:
         return None
 
 
+PlanHook = Callable[[dict[str, Any]], None]
+
+
 class PlanService:
     def __init__(self, engine: Engine, bus: EventBus, runner: JobRunner) -> None:
         self.engine = engine
         self.bus = bus
         self.runner = runner
         runner.on_finished(self._on_run_finished)
+        # Chat integration (Phase 5): called with the plan view. Hooks must not block; the
+        # chat service schedules its own async work.
+        self._on_created: list[PlanHook] = []
+        self._on_done: list[PlanHook] = []
+
+    def on_created(self, hook: PlanHook) -> None:
+        self._on_created.append(hook)
+
+    def on_done(self, hook: PlanHook) -> None:
+        """Called when a plan reaches done/failed/cancelled."""
+        self._on_done.append(hook)
+
+    def _call(self, hooks: list[PlanHook], plan_id: int) -> None:
+        view = self.get(plan_id)
+        if view is None:
+            return
+        for hook in hooks:
+            try:
+                hook(view)
+            except Exception:
+                log.exception("plan hook failed for plan %s", plan_id)
 
     # ------------------------------------------------------------------ queries
     def get(self, plan_id: int) -> dict[str, Any] | None:
@@ -118,7 +146,10 @@ class PlanService:
             for i, (step, p) in enumerate(zip(data.steps, params, strict=True), start=1):
                 s.add(PlanStep(plan_id=plan_id, order=i, agent=step.agent, params=p))
             s.commit()
-        self.bus.publish("plan.status", plan_id=plan_id, status=PlanStatus.PENDING.value)
+        self.bus.publish(
+            "plan.status", plan_id=plan_id, status=PlanStatus.PENDING.value, chat_id=data.chat_id
+        )
+        self._call(self._on_created, plan_id)
         if all(get_setting(self.engine, auto_approve_key(st.agent), False) for st in data.steps):
             return await self.approve(plan_id, auto=True)
         view = self.get(plan_id)
@@ -231,6 +262,7 @@ class PlanService:
                     s.add(step)
             s.commit()
         self.bus.publish("plan.status", plan_id=plan_id, status=status)
+        self._call(self._on_done, plan_id)
 
 
 def run_view(run: AgentRun, logs: list[Any] | None = None) -> dict[str, Any]:

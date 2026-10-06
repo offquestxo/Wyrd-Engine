@@ -8,3 +8,14 @@ usage:
   # "Today" on the quota meters starts at midnight in this timezone. Google (Gemini, YouTube)
   # resets daily quotas at midnight Pacific time.
   day_reset_timezone: America/Los_Angeles
+
+orchestrator:
+  # Claude Code headless (`claude -p`) settings for the chat orchestrator.
+  model: sonnet               # alias or full model name (claude --model)
+  effort: low                 # claude --effort: low, medium, high, xhigh, max
+  # Sessions live in this directory (Claude keys saved sessions by cwd). It is outside the
+  # repo so the project's CLAUDE.md isn't loaded into every chat turn.
+  workdir: ~/.local/share/wyrd/orchestrator
+  turn_timeout_s: 300         # a chat turn is killed after this
+  daily_soft_cap: 40          # Claude calls per day (chat turns + Claude agent runs); Settings overrides
+  warn_ratio: 0.8             # meter turns amber at this share of the cap

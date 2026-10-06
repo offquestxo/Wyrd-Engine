@@ -12,7 +12,13 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict
 
-from apps.api.agents.params import DemoParams, OutlierParams, ResearcherParams, ScoutParams
+from apps.api.agents.params import (
+    DemoParams,
+    OutlierParams,
+    ResearcherParams,
+    ScoutParams,
+    StoryUpdateParams,
+)
 
 if TYPE_CHECKING:
     from apps.api.jobs import RunContext
@@ -89,6 +95,15 @@ AGENTS: dict[str, AgentInfo] = {
         hidden=True,
         runner="apps.api.agents.demo:run",
         params_model=DemoParams,
+    ),
+    "story_update": AgentInfo(
+        name="story_update",
+        description="Applies a story change that needs approval (e.g. a status move)",
+        uses_claude=False,
+        uses_youtube_quota=False,
+        hidden=True,
+        runner="apps.api.agents.story_update:run",
+        params_model=StoryUpdateParams,
     ),
     "factcheck": AgentInfo(
         name="factcheck",
