@@ -36,29 +36,34 @@ export interface StoryScores {
 
 export interface StorySource {
   id: number
+  story_id: number
   url: string
-  title: string
+  title: string | null
   source_type: "primary" | "secondary"
-  excerpt?: string
+  excerpt: string | null
+  added_by: string | null
 }
 
+/** A story as returned by /api/stories (sources/dossier_versions only on the detail call). */
 export interface Story {
   id: number
   slug: string
   title: string
-  company: string
+  company: string | null
   status: StoryStatus
-  series: Series
-  format: StoryFormat
-  hook: string
-  scores: StoryScores
+  series: Series | null
+  format: StoryFormat | null
+  hook: string | null
+  scores: (Partial<StoryScores> & { total?: number | null }) | null
   gap_score: number | null
-  from_outlier: boolean
-  notes?: string
-  sources: StorySource[]
-  dossier_versions: number[]
+  outlier_ref: number | null
+  notes: string | null
   created_at: string
   updated_at: string
+  total_score: number | null
+  source_count: number
+  sources?: StorySource[]
+  dossier_versions?: number[]
 }
 
 export type AgentName = "scout" | "outlier" | "researcher"
@@ -261,6 +266,7 @@ export interface PlanStepRecord {
   run_id: number | null
   uses_claude: boolean
   uses_youtube_quota: boolean
+  estimate?: { youtube_search_calls?: number; youtube_units?: number; note?: string } | null
 }
 
 export interface PlanRecord {

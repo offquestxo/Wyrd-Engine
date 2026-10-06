@@ -74,6 +74,13 @@ export function LivePlanCard({ plan, onChange }: { plan: PlanRecord; onChange?: 
                 </Link>
               )}
             </div>
+            {step.estimate && (step.estimate.youtube_search_calls ?? 0) > 0 && (
+              <p className="mt-2 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                <MonitorPlayIcon className="size-3" />
+                Up to {step.estimate.youtube_search_calls} YouTube search calls ·{" "}
+                {step.estimate.youtube_units} units (of 100 searches / 10,000 units a day)
+              </p>
+            )}
             {editing ? (
               <StepEditor
                 step={step}

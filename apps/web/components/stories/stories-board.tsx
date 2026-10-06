@@ -3,7 +3,6 @@
 import { useState } from "react"
 
 import { STORY_STATUSES, type Story, type StoryStatus } from "@/lib/types"
-import { totalScore } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
 /** Board grouped by status. Drag a card to another column to change its status. */
@@ -31,8 +30,11 @@ export function StoriesBoard({
               setOver(status)
             }}
             onDragLeave={() => setOver(null)}
-            onDrop={() => {
-              const story = stories.find((s) => s.id === dragId)
+            onDrop={(e) => {
+              e.preventDefault()
+              // The dragged id travels with the event (state may not have re-rendered yet).
+              const id = Number(e.dataTransfer.getData("text/x-story-id")) || dragId
+              const story = stories.find((s) => s.id === id)
               if (story && story.status !== status) onMove(story, status)
               setDragId(null)
               setOver(null)
@@ -51,7 +53,11 @@ export function StoriesBoard({
                 <button
                   key={story.id}
                   draggable
-                  onDragStart={() => setDragId(story.id)}
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData("text/x-story-id", String(story.id))
+                    e.dataTransfer.effectAllowed = "move"
+                    setDragId(story.id)
+                  }}
                   onDragEnd={() => setDragId(null)}
                   onClick={() => onOpen(story)}
                   className={cn(
@@ -62,8 +68,8 @@ export function StoriesBoard({
                   <p className="text-sm font-medium">{story.title}</p>
                   <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{story.hook}</p>
                   <div className="mt-2 flex items-center justify-between font-mono text-[10px] text-muted-foreground">
-                    <span>{story.series}</span>
-                    <span className="text-foreground/80">{totalScore(story.scores)}</span>
+                    <span>{story.series ?? "—"}</span>
+                    <span className="text-foreground/80">{story.total_score ?? "—"}</span>
                   </div>
                 </button>
               ))}

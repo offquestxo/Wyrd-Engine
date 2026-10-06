@@ -33,6 +33,7 @@ const EVENT_TYPES = [
   "run.log",
   "run.status",
   "plan.status",
+  "story.changed",
 ]
 const MAX_EVENTS = 300
 

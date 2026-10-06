@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next"
 import { Geist, Geist_Mono } from "next/font/google"
 
+import { ProposeProvider } from "@/components/plans/propose-provider"
 import { AppShell } from "@/components/shell/app-shell"
 import { Toaster } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
@@ -33,7 +34,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="antialiased">
         <TooltipProvider delayDuration={300}>
           <EventsProvider>
-            <AppShell>{children}</AppShell>
+            <ProposeProvider>
+              <AppShell>{children}</AppShell>
+            </ProposeProvider>
           </EventsProvider>
           <Toaster theme="dark" position="bottom-center" />
         </TooltipProvider>

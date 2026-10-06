@@ -7,7 +7,7 @@ import useSWR from "swr"
 
 import { useEngineEvent } from "@/hooks/use-events"
 import { fetcher } from "@/lib/api"
-import type { PlanRecord, RunRecord, UsageReport } from "@/lib/types"
+import type { PlanRecord, RunRecord, Story, UsageReport } from "@/lib/types"
 
 /** Returns a function that runs `fn` at most once per `ms` (trailing call kept). */
 function useThrottle(fn: () => void, ms: number) {
@@ -79,6 +79,23 @@ export function useRun(id: number) {
         },
       { revalidate: false },
     )
+  })
+  return swr
+}
+
+export function useStories() {
+  const swr = useSWR<Story[]>("/api/stories", fetcher)
+  const refresh = useThrottle(() => void swr.mutate(), 800)
+  useEngineEvent(["story.changed", "run.status"], (event) => {
+    if (event.type === "story.changed" || event.data.status === "succeeded") refresh()
+  })
+  return swr
+}
+
+export function useStory(id: number | null) {
+  const swr = useSWR<Story>(id ? `/api/stories/${id}` : null, fetcher)
+  useEngineEvent(["story.changed"], (event) => {
+    if (event.data.story_id === id) void swr.mutate()
   })
   return swr
 }
