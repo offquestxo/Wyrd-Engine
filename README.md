@@ -62,6 +62,10 @@ Open http://127.0.0.1:3000 after `make dev`. In Chrome or Edge, use the install 
 
 **Settings** uses real data: key status and "Test connection", provider routes and limits, per-agent auto-approve (off by default), and editors for every file in `config/`. After editing `.env`, click **Reload .env** instead of restarting.
 
+**Chat** talks to the orchestrator: Claude Code in headless mode, using your logged-in `claude` CLI (check with `claude auth status`). It answers questions from the story database and memory, and proposes a **plan card** for any work; nothing runs until you click **Approve** (or turn on auto-approve for that agent). When the runs finish, a result card appears and the orchestrator summarizes. Start a message with `@scout` or `@outlier` to skip Claude entirely: a fast model parses it straight into a plan card. Claude calls per day are counted against a soft cap (Settings → Agents) and shown in the chat header and on Home.
+
+The orchestrator runs with only the engine's own tools (no shell, no file access). Its sessions are stored under `~/.local/share/wyrd/orchestrator` (`config/engine.yaml` → `orchestrator`). The browser reaches the API through the web app's own `/api` path, which Next.js forwards to `127.0.0.1:8000`.
+
 To preview a page's loading, empty, or error state, add `?state=loading`, `?state=empty`, or `?state=error` to its URL (sample-data pages only).
 
 ## Gemini via OAuth (recommended)
