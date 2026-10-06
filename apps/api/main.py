@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -54,7 +55,7 @@ KEYS: list[dict[str, Any]] = [
 
 
 CLAUDE_CHECK_TTL_S = 60.0
-mcp_app = mcp_server.mcp.http_app(path="/")
+mcp_apps = {group: server.http_app(path="/") for group, server in mcp_server.SERVERS.items()}
 
 
 async def cached_claude_status() -> ClaudeStatus:
@@ -89,7 +90,9 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     await runner.start()
     backfill = asyncio.create_task(memory.backfill(engine), name="memory-backfill")
     try:
-        async with mcp_app.lifespan(_app):
+        async with contextlib.AsyncExitStack() as stack:
+            for mcp_app in mcp_apps.values():
+                await stack.enter_async_context(mcp_app.lifespan(_app))
             yield
     finally:
         backfill.cancel()
@@ -101,8 +104,10 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="wyrd.exe story engine", version="0.1.0", lifespan=lifespan)
-# MCP for the orchestrator's Claude sessions. Not under /api, so the web proxy never exposes it.
-app.mount("/mcp", mcp_server.TokenGuard(mcp_app))
+# MCP for Claude sessions (/mcp chat, /mcp-research @researcher). Not under /api, so the web
+# proxy never exposes them.
+for _group, _mcp_app in mcp_apps.items():
+    app.mount(mcp_server.MOUNTS[_group], mcp_server.TokenGuard(_mcp_app))
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://127.0.0.1:3000", "http://localhost:3000"],

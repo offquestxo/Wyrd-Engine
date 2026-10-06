@@ -237,3 +237,134 @@ def test_duplicate_source_numbers_rejected() -> None:
                 {"n": 1, "url": WIKI, "title": "b"},
             ]
         )
+
+
+# ---------------------------------------------------------------------------- MCP tools
+from fastmcp import Client  # noqa: E402
+
+from apps.api import mcp_server  # noqa: E402
+from apps.api.providers.schemas import DocExtraction, Extract, SecondOpinion  # noqa: E402
+from apps.api.research import session as rsession  # noqa: E402
+from apps.api.research import tools as rtools  # noqa: E402
+
+
+class ToolRouter:
+    def __init__(self) -> None:
+        self.extract_calls: list[dict[str, Any]] = []
+
+    async def extract_from_document(
+        self, document: str, question: str, deep: bool = False
+    ) -> DocExtraction:
+        self.extract_calls.append({"document": document, "question": question, "deep": deep})
+        return DocExtraction(
+            answer="Sales fell.",
+            found=True,
+            extracts=[Extract(quote="Net sales decreased 4.4 percent")],
+        )
+
+    async def second_opinion(self, markdown: str) -> SecondOpinion:
+        return SecondOpinion(
+            flags=[
+                {
+                    "claim": "liquidation",
+                    "issue": "no source",
+                    "severity": "high",
+                    "suggestion": "move",
+                }
+            ],
+            overall="Mostly sourced.",
+        )
+
+
+@pytest.fixture
+def research_env(engine: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Any:
+    from apps.api.db.models import AgentRun
+
+    with Session(engine) as s:
+        s.add(AgentRun(id=77, agent="researcher", status="running"))
+        s.commit()
+    router = ToolRouter()
+    logs: list[tuple[str, str]] = []
+    sess = rsession.open_session(
+        rsession.ResearchSession(
+            run_id=77, story_id=1, depth="standard", log=lambda lvl, msg: logs.append((lvl, msg))
+        )
+    )
+    monkeypatch.setitem(mcp_server._services, "test_run_id", 77)
+    monkeypatch.setattr(rtools, "get_router", lambda: router)
+    monkeypatch.setattr(rtools, "get_engine", lambda: engine)
+    monkeypatch.setattr(rtools, "fetch_text", lookup)
+    monkeypatch.setattr(dmod, "RESEARCH_DIR", tmp_path / "research")
+    yield {"session": sess, "router": router, "logs": logs, "tmp": tmp_path}
+    rsession.close_session(77)
+
+
+def research_client() -> Client:
+    return Client(mcp_server.SERVERS[mcp_server.RESEARCHER])
+
+
+async def test_researcher_server_only_lists_its_tools() -> None:
+    async with research_client() as c:
+        names = {t.name for t in await c.list_tools()}
+    assert {"source_edgar", "extract_from_document", "second_opinion", "save_dossier"} <= names
+    assert "propose_plan" not in names and "get_story" in names
+    async with Client(mcp_server.mcp) as c:
+        chat_names = {t.name for t in await c.list_tools()}
+    assert "save_dossier" not in chat_names and len(chat_names) == 7
+
+
+async def test_depth_limits_sources_and_known_limits_are_noted(
+    research_env: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def no_data(*a: Any, **k: Any) -> Any:
+        raise SourceError("yahoo", "no price data for CCTYQ")
+
+    monkeypatch.setattr(rtools.yahoo, "history", no_data)
+    async with research_client() as c:
+        with pytest.raises(Exception, match="isn't used at depth 'standard'"):
+            await c.call_tool("source_gdelt", {"query": "Circuit City"})  # deep only
+        with pytest.raises(Exception, match="no price data"):
+            await c.call_tool("source_yahoo", {"action": "history", "ticker": "CCTYQ"})
+        with pytest.raises(Exception, match="1770–1963"):
+            await c.call_tool(
+                "source_loc_newspapers", {"query": "Circuit City", "start_year": 2008}
+            )
+    notes = research_env["session"].source_notes
+    assert any("delisted" in n for n in notes) and any("1963" in n for n in notes)
+    assert any("yahoo" in m and "failed" in m for _, m in research_env["logs"])
+
+
+async def test_extract_keeps_document_for_excerpt_check(research_env: Any) -> None:
+    async with research_client() as c:
+        out = (
+            await c.call_tool("extract_from_document", {"url_or_text": TENK, "question": "Sales?"})
+        ).data
+    assert out["extracts"][0]["quote"] == "Net sales decreased 4.4 percent"
+    assert TENK in research_env["session"].texts  # reused by the excerpt check
+    assert research_env["router"].extract_calls[0]["deep"] is False  # standard depth
+
+
+async def test_save_requires_second_opinion_then_reports_checks(research_env: Any) -> None:
+    payload = {"dossier": make_dossier().model_dump()}
+    async with research_client() as c:
+        with pytest.raises(Exception, match="second_opinion"):
+            await c.call_tool("save_dossier", payload)
+        review = (await c.call_tool("second_opinion", payload)).data
+        assert review["flags"][0]["severity"] == "high"
+        assert (
+            review["excerpt_precheck"]["passed"] == 4
+            and len(review["excerpt_precheck"]["failed"]) == 3
+        )
+        saved = (await c.call_tool("save_dossier", payload)).data
+    assert saved["excerpt_check"] == {"passed": 4, "failed": 3, "truncated": 0}
+    assert (research_env["tmp"] / "research" / "circuit-city" / "dossier.md").exists()
+    with Session(research_env_engine(research_env)) as s:
+        d = s.exec(select(Dossier)).one()
+    assert d.run_id == 77
+    assert d.second_opinion and d.second_opinion["flags"][0]["claim"] == "liquidation"
+    assert d.second_opinion["resolutions"][0]["action"] == "moved_to_open_questions"
+    assert research_env["session"].saved[0]["version"] == 1
+
+
+def research_env_engine(env: Any) -> Any:
+    return rtools.get_engine()
