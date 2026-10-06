@@ -18,6 +18,7 @@ primary by the engine.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import re
 from collections.abc import Awaitable, Callable
@@ -152,6 +153,45 @@ def is_primary(url: str, domains: list[str]) -> bool:
     return any(host == d or host.endswith("." + d) for d in domains)
 
 
+_SCALE = {"thousand": 1e3, "million": 1e6, "m": 1e6, "billion": 1e9, "bn": 1e9, "b": 1e9}
+_PROSE_NUM = re.compile(
+    r"(?<![\w.])(\d[\d,]*(?:\.\d+)?)\s*(thousand|million|billion|bn|m|b)?\b", re.IGNORECASE
+)
+
+
+def prose_numbers(text: str) -> list[tuple[str, float, float]]:
+    """(as written, value, rounding tolerance) for each specific number in prose. Years and
+    single digits are skipped (too common to check usefully)."""
+    out = []
+    for m in _PROSE_NUM.finditer(text):
+        token, scale_word = m.group(1).rstrip(",."), (m.group(2) or "").lower()
+        digits = token.replace(",", "")
+        if _is_year(digits) or (len(digits) < 2 and not scale_word):
+            continue
+        try:
+            value = float(digits)
+        except ValueError:
+            continue
+        scale = _SCALE.get(scale_word, 1.0)
+        decimals = len(digits.split(".")[1]) if "." in digits else 0
+        out.append((m.group(0).strip(), value * scale, 0.5 * scale / 10**decimals))
+    return out
+
+
+def number_in_text(value: float, tolerance: float, text_numbers: set[float]) -> bool:
+    """A source number equals the prose number, allowing filings' "in thousands" tables and
+    the prose's rounding."""
+    return any(abs(n * unit - value) <= tolerance for n in text_numbers for unit in (1.0, 1e3, 1e6))
+
+
+def numbers_of(text: str) -> set[float]:
+    found = set()
+    for token in _NUM.findall(text):
+        with contextlib.suppress(ValueError):
+            found.add(float(token.replace(",", "")))
+    return found
+
+
 class RowCheck(BaseModel):
     section: str  # "timeline" | "key_numbers" | "twist" | "key_people"
     claim: str
@@ -260,6 +300,37 @@ async def check_rows(
             person.source, person.excerpt = None, None
             person.role = f"{person.role} (unverified)"
 
+    # Specific numbers in the prose sections must come from a cited source too. They stay in
+    # the prose (rewriting it is the researcher's job) but are listed as unverified.
+    source_numbers: set[float] = set()
+    for src in out.sources:
+        text = await text_for(src.n)
+        if text:
+            source_numbers |= numbers_of(text)
+    b = out.story_beats
+    prose = {
+        "Summary": out.summary,
+        "Twist": out.twist,
+        "Story Beats": " ".join([b.rise, b.peak, b.cracks, b.fall, b.aftermath]),
+        "Hook Ideas": " ".join(out.hook_ideas),
+        "Angles": f"{out.best_short_angle} {out.best_long_angle}",
+    }
+    seen: set[str] = set()
+    for section, text in prose.items():
+        for written, value, tolerance in prose_numbers(text):
+            if written in seen or number_in_text(value, tolerance, source_numbers):
+                continue
+            seen.add(written)
+            checks.append(
+                RowCheck(
+                    section="prose_numbers",
+                    claim=f"{section}: “{written}”",
+                    source=None,
+                    ok=False,
+                    reason="number not found in any cited source",
+                )
+            )
+            moved.append(f"{section} mentions “{written}”, which no cited source contains")
     out.open_questions = [*out.open_questions, *(f"Unverified: {m}" for m in moved)]
     return out, checks, fetch_errors
 
@@ -278,12 +349,15 @@ def render_markdown(
         src = next((s for s in d.sources if s.n == n), None)
         return f"[[{n}]]({src.url})" if src else f"[{n}]"
 
-    passed = sum(1 for c in checks if c.ok)
+    rows = [c for c in checks if c.section != "prose_numbers"]
+    passed = sum(1 for c in rows if c.ok)
+    prose = len(checks) - len(rows)
+    note = f" {prose} number(s) in the prose weren't found in any cited source." if prose else ""
     lines = [
         f"# {d.title} — Research Dossier",
         "",
-        f"*Version {version}. Excerpt check: {passed} of {len(checks)} claims verified against "
-        "their sources; the rest are listed under Open Questions.*",
+        f"*Version {version}. Excerpt check: {passed} of {len(rows)} claims verified against "
+        f"their sources; the rest are listed under Open Questions.{note}*",
         "",
         "## Summary",
         d.summary,
@@ -400,10 +474,12 @@ async def save_dossier(
         )
     markdown = render_markdown(cleaned, primary, checks, version)
     srcs = sources_json(cleaned, primary, checks)
-    passed = sum(1 for c in checks if c.ok)
+    rows = [c for c in checks if c.section != "prose_numbers"]
+    passed = sum(1 for c in rows if c.ok)
     summary = {
         "passed": passed,
-        "failed": len(checks) - passed,
+        "failed": len(rows) - passed,
+        "prose_numbers_unverified": len(checks) - len(rows),
         "truncated": sum(1 for c in checks if c.truncated),
         "rows": [c.model_dump() for c in checks],
         "fetch_errors": fetch_errors,
@@ -458,7 +534,9 @@ async def save_dossier(
         "dossier_id": dossier_id,
         "story_id": story_id,
         "version": version,
-        "excerpt_check": {k: summary[k] for k in ("passed", "failed", "truncated")},
+        "excerpt_check": {
+            k: summary[k] for k in ("passed", "failed", "truncated", "prose_numbers_unverified")
+        },
         "moved_to_open_questions": [
             f"{c.section}: {c.claim} — {c.reason}" for c in checks if not c.ok
         ],

@@ -1,0 +1,47 @@
+[
+  {
+    "n": 1,
+    "url": "https://en.wikipedia.org/wiki/Circuit_City",
+    "title": "Circuit City — Wikipedia",
+    "kind": "encyclopedia article",
+    "source_type": "secondary",
+    "claims_checked": 25,
+    "claims_verified": 24
+  },
+  {
+    "n": 2,
+    "url": "https://www.sec.gov/Archives/edgar/data/104599/000119312508093063/d10k.htm",
+    "title": "Circuit City Stores 10-K (FY2008, filed April 2008)",
+    "kind": "10-K filing",
+    "source_type": "primary",
+    "claims_checked": 2,
+    "claims_verified": 2
+  },
+  {
+    "n": 3,
+    "url": "https://www.sec.gov/Archives/edgar/data/104599/000119312507095941/d10k.htm",
+    "title": "Circuit City Stores 10-K (FY2007, filed April 2007)",
+    "kind": "10-K filing",
+    "source_type": "primary",
+    "claims_checked": 2,
+    "claims_verified": 2
+  },
+  {
+    "n": 4,
+    "url": "https://www.sec.gov/Archives/edgar/data/104599/000010459908000085/ccs1112088k_ex99.htm",
+    "title": "Circuit City 8-K — Bankruptcy Press Release (November 2008)",
+    "kind": "8-K filing",
+    "source_type": "primary",
+    "claims_checked": 1,
+    "claims_verified": 1
+  },
+  {
+    "n": 5,
+    "url": "https://www.sec.gov/Archives/edgar/data/104599/000010459909000004/ex10-1.htm",
+    "title": "Circuit City 8-K — Liquidation Agency Agreement (January 2009)",
+    "kind": "8-K filing",
+    "source_type": "primary",
+    "claims_checked": 2,
+    "claims_verified": 2
+  }
+]

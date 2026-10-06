@@ -172,7 +172,12 @@ async def test_save_moves_failed_rows_and_exports(engine: Any, tmp_path: Path) -
     )
     # timeline 2 + key numbers 4 + twist 1 = 7 checked; 3 fail (timeline #2, $12.4B, dead source)
     assert result["version"] == 1
-    assert result["excerpt_check"] == {"passed": 4, "failed": 3, "truncated": 0}
+    assert result["excerpt_check"] == {
+        "passed": 4,
+        "failed": 3,
+        "truncated": 0,
+        "prose_numbers_unverified": 0,
+    }
     assert result["primary_sources"] == 1
 
     md = (out / "circuit-city" / "dossier.md").read_text()
@@ -227,6 +232,39 @@ async def test_long_excerpts_are_capped_before_checking(engine: Any, tmp_path: P
         saved = s.exec(select(Dossier)).one().data
     assert saved and len(saved["timeline"]) == 1  # a prefix of a real quote still passes
     assert len(saved["timeline"][0]["excerpt"].split()) == 40  # scoring.yaml cap
+
+
+async def test_prose_numbers_must_come_from_a_cited_source(engine: Any, tmp_path: Path) -> None:
+    beats = {
+        "rise": "Grew to $11.7 billion in sales",  # 11,743,700 (thousands) in the 10-K: ok
+        "peak": "682 Superstores and 3,400 layoffs",  # both in sources: ok
+        "cracks": "About 46,000 employees",  # in no source: flagged
+        "fall": "f",
+        "aftermath": "Filed in 2008",  # years aren't checked
+    }
+    d = make_dossier(
+        story_beats=beats, hook_ideas=["$9.9 billion vanished", "h2", "h3", "h4", "h5"]
+    )
+    result = await dmod.save_dossier(engine, 1, d, lookup, research_dir=tmp_path)
+    assert result["excerpt_check"]["prose_numbers_unverified"] == 2
+    assert result["excerpt_check"]["passed"] == 4  # row counts unaffected
+    md = (tmp_path / "circuit-city" / "dossier.md").read_text()
+    unverified = md.split("## Open Questions / Unverified")[1]
+    assert "Story Beats mentions “46,000”" in unverified
+    assert "Hook Ideas mentions “$9.9 billion”" not in unverified  # written form excludes "$"
+    assert "Hook Ideas mentions “9.9 billion”" in unverified
+    assert "11.7 billion" not in unverified and "682" not in unverified
+    assert "2 number(s) in the prose weren't found" in md
+
+
+def test_prose_number_parsing() -> None:
+    found = {
+        w: (v, t) for w, v, t in dmod.prose_numbers("$12.43 billion, 654 stores, in 2008, 3 CEOs")
+    }
+    assert found["12.43 billion"] == (12.43e9, 0.005e9) and found["654"] == (654.0, 0.5)
+    assert "2008" not in found and "3" not in found
+    assert dmod.number_in_text(12.43e9, 0.005e9, {12429754.0})  # filing table in thousands
+    assert not dmod.number_in_text(12.43e9, 0.005e9, {12529754.0})
 
 
 def test_duplicate_source_numbers_rejected() -> None:
@@ -356,7 +394,12 @@ async def test_save_requires_second_opinion_then_reports_checks(research_env: An
             and len(review["excerpt_precheck"]["failed"]) == 3
         )
         saved = (await c.call_tool("save_dossier", payload)).data
-    assert saved["excerpt_check"] == {"passed": 4, "failed": 3, "truncated": 0}
+    assert saved["excerpt_check"] == {
+        "passed": 4,
+        "failed": 3,
+        "truncated": 0,
+        "prose_numbers_unverified": 0,
+    }
     assert (research_env["tmp"] / "research" / "circuit-city" / "dossier.md").exists()
     with Session(research_env_engine(research_env)) as s:
         d = s.exec(select(Dossier)).one()
@@ -533,3 +576,14 @@ async def test_stream_stops_at_turn_budget(monkeypatch: pytest.MonkeyPatch) -> N
     assert isinstance(result, orch.TurnResult) and not result.ok and procs[0].killed
     assert "turn budget (3 turns)" in (result.error or "") and result.turns == 3
     assert sum(1 for e in out if getattr(e, "kind", "") == "tool") == 4  # stopped on the 4th
+
+
+async def test_unreadable_links_fail_fast_with_a_note(research_env: Any) -> None:
+    async with research_client() as c:
+        with pytest.raises(Exception, match="redirect wrappers"):
+            await c.call_tool(
+                "extract_from_document",
+                {"url_or_text": "https://news.google.com/rss/articles/CBMi123", "question": "q"},
+            )
+    assert research_env["router"].extract_calls == []  # no provider call spent
+    assert any("Google News" in n for n in research_env["session"].source_notes)
