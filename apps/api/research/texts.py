@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import html
 import io
+import logging
 import re
 import unicodedata
 from html.parser import HTMLParser
@@ -64,6 +65,8 @@ def html_to_text(markup: str) -> str:
 
 def pdf_to_text(data: bytes) -> str:
     from pypdf import PdfReader
+
+    logging.getLogger("pypdf").setLevel(logging.ERROR)  # font-encoding warnings are noise here
 
     reader = PdfReader(io.BytesIO(data))
     return "\n".join(page.extract_text() or "" for page in reader.pages)

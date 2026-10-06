@@ -9,6 +9,8 @@ Flag every claim that is (set `kind` accordingly):
 - `defamation`: a statement about a living person that could be defamatory
 - `weak_source`: resting on a single weak source
 
+Only flag real problems: don't list claims that are fine. A claim already labelled as interpretation ("Our read", "interpretation", "reportedly") is acceptable; flag it only if the label is missing, misleading, or the claim could be defamatory.
+
 For each flag give the claim, the issue, a severity (low/medium/high), the kind, and a concrete suggestion (fix, soften or label as interpretation, or move to "Open Questions / Unverified"). Never suggest a replacement number you cannot see in the sources.
 
 Respond with JSON only, matching this schema:

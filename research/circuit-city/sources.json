@@ -5,8 +5,8 @@
     "title": "Circuit City — Wikipedia",
     "kind": "encyclopedia article",
     "source_type": "secondary",
-    "claims_checked": 25,
-    "claims_verified": 24
+    "claims_checked": 29,
+    "claims_verified": 29
   },
   {
     "n": 2,
@@ -14,8 +14,8 @@
     "title": "Circuit City Stores 10-K (FY2008, filed April 2008)",
     "kind": "10-K filing",
     "source_type": "primary",
-    "claims_checked": 2,
-    "claims_verified": 2
+    "claims_checked": 3,
+    "claims_verified": 3
   },
   {
     "n": 3,
@@ -23,8 +23,8 @@
     "title": "Circuit City Stores 10-K (FY2007, filed April 2007)",
     "kind": "10-K filing",
     "source_type": "primary",
-    "claims_checked": 2,
-    "claims_verified": 2
+    "claims_checked": 4,
+    "claims_verified": 4
   },
   {
     "n": 4,
@@ -32,8 +32,8 @@
     "title": "Circuit City 8-K — Bankruptcy Press Release (November 2008)",
     "kind": "8-K filing",
     "source_type": "primary",
-    "claims_checked": 1,
-    "claims_verified": 1
+    "claims_checked": 4,
+    "claims_verified": 4
   },
   {
     "n": 5,
@@ -41,7 +41,7 @@
     "title": "Circuit City 8-K — Liquidation Agency Agreement (January 2009)",
     "kind": "8-K filing",
     "source_type": "primary",
-    "claims_checked": 2,
-    "claims_verified": 2
+    "claims_checked": 1,
+    "claims_verified": 1
   }
 ]

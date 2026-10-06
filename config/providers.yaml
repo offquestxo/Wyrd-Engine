@@ -175,7 +175,7 @@ tasks:
     - { provider: nvidia, model: chat }
     - { provider: openrouter, model: free }
   check_support:                   # does an excerpt support every part of a claim?
-    - { provider: groq, model: fast }
+    - { provider: groq, model: smart }   # 120B: the 20B model misjudged dates live
     - { provider: nvidia, model: chat }
   parse_mention:
     - { provider: groq, model: fast }
