@@ -368,3 +368,168 @@ async def test_save_requires_second_opinion_then_reports_checks(research_env: An
 
 def research_env_engine(env: Any) -> Any:
     return rtools.get_engine()
+
+
+# ---------------------------------------------------------------------------- runner
+from apps.api.agents import orchestrator as orch  # noqa: E402
+from apps.api.agents import researcher  # noqa: E402
+from apps.api.db.models import ProviderUsage  # noqa: E402
+
+
+class RunCtx:
+    def __init__(self, run_id: int, params: dict[str, Any]) -> None:
+        self.run_id, self.params = run_id, params
+        self.logs: list[tuple[str, str]] = []
+        self.steps: list[str] = []
+
+    def log(self, level: str, message: str, data: Any = None) -> None:
+        self.logs.append((level, message))
+
+    def step(self, name: str, progress: float | None = None) -> None:
+        self.steps.append(name)
+
+
+def test_estimate_and_command_allowlist() -> None:
+    est = researcher.estimate({"topic": "Circuit City", "depth": "standard"})
+    assert est["claude_turns"] == 40 and est["youtube_units"] == 0 and "edgar" in est["sources"]
+    deep = researcher.estimate({"topic": "Circuit City", "depth": "deep"})
+    assert deep["claude_turns"] == 70 and deep["youtube_search_calls"] == 2
+    cmd = researcher.build_command("claude", 5, "PROMPT", 40, "sonnet", "medium")
+    assert cmd[cmd.index("--tools") + 1] == "WebSearch,WebFetch"  # no Bash/Edit/Write/Read
+    allowed = cmd[cmd.index("--allowedTools") + 1].split(",")
+    assert "mcp__wyrd__save_dossier" in allowed and "mcp__wyrd__propose_plan" not in allowed
+    assert not any(t in allowed for t in ("Bash", "Write", "Edit", "Read"))
+    agent = json.loads(cmd[cmd.index("--agents") + 1])["researcher"]
+    assert agent["maxTurns"] == 40 and agent["prompt"] == "PROMPT"
+    assert agent["tools"] == ["mcp__wyrd", "WebSearch", "WebFetch"]  # from .claude/agents/
+    mcp = json.loads(cmd[cmd.index("--mcp-config") + 1])["mcpServers"]["wyrd"]
+    assert mcp["url"].endswith("/mcp-research/") and mcp["headers"]["x-wyrd-run"] == "5"
+    assert "--no-session-persistence" in cmd and cmd[cmd.index("--agent") + 1] == "researcher"
+
+
+def fake_stream(engine: Any, save: bool = True) -> Any:
+    """A Claude stand-in that uses the real researcher MCP tools in-process."""
+
+    async def stream(
+        command: Any,
+        cwd: Any,
+        prompt: str,
+        timeout_s: float,
+        label: str,
+        max_turns: int | None = None,
+    ) -> Any:
+        payload = {"dossier": make_dossier().model_dump()}
+        async with research_client() as c:
+            yield orch.TurnEvent("tool", tool="second_opinion", data={"input": {}})
+            await c.call_tool("second_opinion", payload)
+            if save:
+                yield orch.TurnEvent("tool", tool="save_dossier", data={"input": {}})
+                await c.call_tool("save_dossier", payload)
+        yield orch.TurnEvent("text", text="Saved.")
+        yield orch.TurnResult(
+            text="Saved.",
+            ok=True,
+            session_id=None,
+            duration_ms=95_000,
+            turns=12,
+            tokens_in=50_000,
+            tokens_out=6_000,
+            model="claude-sonnet",
+            tools=[],
+        )
+
+    return stream
+
+
+async def test_run_saves_dossier_and_logs_claude_usage(
+    research_env: Any, engine: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(researcher, "get_engine", lambda: engine)
+    monkeypatch.setattr(researcher.shutil, "which", lambda _: "/usr/bin/claude")
+    monkeypatch.setattr(researcher, "workdir", lambda: Path("."))
+    monkeypatch.setattr(researcher, "stream_claude", fake_stream(engine))
+    rsession.close_session(77)  # the runner opens its own session for its run id
+    with Session(engine) as s:
+        s.add(Story(slug="inbox-story", title="Inbox story", status="Inbox"))
+        s.commit()
+    result = await researcher.run(RunCtx(77, {"story_id": 1}))  # type: ignore[arg-type]
+    assert result["version"] == 1 and result["excerpt_check"]["failed"] == 3
+    assert result["second_opinion"]["flags"][0]["claim"] == "liquidation"
+    assert result["second_opinion"]["resolutions"][0]["action"] == "moved_to_open_questions"
+    assert result["claude"]["turns"] == 12 and result["claude"]["duration_s"] == 95
+    assert "excerpt check 4 passed, 3 moved to Open Questions" in result["summary"]
+    with Session(engine) as s:
+        usage = s.exec(select(ProviderUsage).where(ProviderUsage.provider == "claude")).one()
+    assert (usage.task, usage.turns, usage.latency_ms) == ("researcher", 12, 95_000)
+    assert rsession.get_session(77) is None  # closed after the run
+
+
+async def test_topic_creates_story_and_unsaved_run_fails(
+    research_env: Any, engine: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(researcher, "get_engine", lambda: engine)
+    monkeypatch.setattr(researcher.shutil, "which", lambda _: "/usr/bin/claude")
+    monkeypatch.setattr(researcher, "workdir", lambda: Path("."))
+    monkeypatch.setattr(researcher, "stream_claude", fake_stream(engine, save=False))
+    rsession.close_session(77)
+    with pytest.raises(RuntimeError, match="No dossier saved"):
+        await researcher.run(RunCtx(77, {"topic": "Toys R Us"}))  # type: ignore[arg-type]
+    with Session(engine) as s:
+        story = s.exec(select(Story).where(Story.title == "Toys R Us")).one()
+        usage = s.exec(select(ProviderUsage).where(ProviderUsage.provider == "claude")).all()
+    assert story.status == "Researching" and len(usage) == 1  # usage logged even on failure
+
+
+def test_existing_story_moves_to_researching(engine: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(researcher, "get_engine", lambda: engine)
+    with Session(engine) as s:
+        s.add(Story(slug="x", title="X Corp", status="Inbox"))
+        s.add(Story(slug="y", title="Y Corp", status="Scripting"))
+        s.commit()
+    from apps.api.agents.params import ResearcherParams
+
+    assert researcher.resolve_story(ResearcherParams(topic="x corp")).status == "Researching"
+    assert researcher.resolve_story(ResearcherParams(topic="Y Corp")).status == "Scripting"
+
+
+async def test_stream_stops_at_turn_budget(monkeypatch: pytest.MonkeyPatch) -> None:
+    from tests.test_chat import FakeProc
+
+    lines = [
+        {
+            "type": "system",
+            "subtype": "init",
+            "session_id": "s",
+            "model": "m",
+            "mcp_servers": [{"name": "wyrd", "status": "connected"}],
+        },
+        *[
+            {
+                "type": "assistant",
+                "message": {
+                    "id": f"m{i}",
+                    "content": [
+                        {"type": "tool_use", "name": "mcp__wyrd__source_edgar", "input": {}}
+                    ],
+                },
+            }
+            for i in range(5)
+        ],
+    ]
+    procs: list[Any] = []
+
+    async def spawn(*cmd: str, **_: Any) -> Any:
+        procs.append(FakeProc(lines))
+        return procs[-1]
+
+    monkeypatch.setattr(orch.asyncio, "create_subprocess_exec", spawn)
+    out = [
+        ev
+        async for ev in orch.stream_claude(
+            lambda a: ["claude"], Path("."), "go", 60, "t", max_turns=3
+        )
+    ]
+    result = out[-1]
+    assert isinstance(result, orch.TurnResult) and not result.ok and procs[0].killed
+    assert "turn budget (3 turns)" in (result.error or "") and result.turns == 3
+    assert sum(1 for e in out if getattr(e, "kind", "") == "tool") == 4  # stopped on the 4th

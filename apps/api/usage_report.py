@@ -12,11 +12,10 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy import Engine, func
 from sqlalchemy import select as sa_select
-from sqlmodel import Session, col, select
+from sqlmodel import Session, col
 
-from apps.api.agents.registry import AGENTS
 from apps.api.config import EngineConfig, ProvidersConfig
-from apps.api.db.models import AgentRun, ProviderUsage
+from apps.api.db.models import ProviderUsage
 from apps.api.settings_store import get_setting
 
 LABELS = {
@@ -178,8 +177,9 @@ def claude_soft_cap(engine: Engine, engine_cfg: EngineConfig) -> int:
 def _claude_meter(
     s: Session, engine: Engine, since: datetime, engine_cfg: EngineConfig
 ) -> dict[str, Any]:
-    """Claude calls today: orchestrator chat turns (provider_usage rows) plus runs of agents
-    that use Claude. Pro plan usage isn't exposed, so this is a local count against a soft cap.
+    """Claude calls today: one provider_usage row per orchestrator chat turn and per Claude
+    agent run (e.g. @researcher). Pro plan usage isn't exposed, so this is a local count
+    against a soft cap.
     `rate_limit` is the last status Claude Code itself reported (allowed / warning / rejected)."""
     turns_row = s.execute(
         sa_select(
@@ -192,16 +192,17 @@ def _claude_meter(
             ),
         ).where(col(ProviderUsage.provider) == "claude", col(ProviderUsage.ts) >= since)
     ).one()
-    chat_calls, duration_ms, turns, errors, tokens = (int(v) for v in turns_row)
-    claude_agents = [n for n, a in AGENTS.items() if a.uses_claude]
-    agent_runs = int(
-        s.exec(
-            select(func.count(col(AgentRun.id))).where(
-                col(AgentRun.agent).in_(claude_agents), col(AgentRun.started_at) >= since
-            )
-        ).one()
-    )
-    used = chat_calls + agent_runs
+    used, duration_ms, turns, errors, tokens = (int(v) for v in turns_row)
+    by_task: dict[str | None, int] = {
+        task: int(n)
+        for task, n in s.execute(
+            sa_select(col(ProviderUsage.task), func.count(col(ProviderUsage.id)))
+            .where(col(ProviderUsage.provider) == "claude", col(ProviderUsage.ts) >= since)
+            .group_by(col(ProviderUsage.task))
+        ).all()
+    }
+    chat_calls = int(by_task.get("orchestrator", 0))
+    agent_runs = used - chat_calls  # @researcher runs (and future Claude agents)
     cap = claude_soft_cap(engine, engine_cfg)
     ratio = used / cap if cap else 0.0
     return {

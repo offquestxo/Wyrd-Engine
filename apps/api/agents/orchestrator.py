@@ -25,7 +25,7 @@ import os
 import shutil
 import time
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -155,7 +155,10 @@ def parse_line(line: str, acc: dict[str, Any]) -> list[TurnEvent]:
             if block.get("type") == "text" and acc.get("texts"):
                 out.append(TurnEvent("text", text="\n\n"))  # separate text blocks
     elif kind == "assistant":
-        for block in (msg.get("message") or {}).get("content") or []:
+        message = msg.get("message") or {}
+        if message.get("id"):
+            acc.setdefault("turn_ids", set()).add(message["id"])
+        for block in message.get("content") or []:
             if block.get("type") == "text" and block.get("text"):
                 acc.setdefault("texts", []).append(block["text"])
             elif block.get("type") == "tool_use":
@@ -192,7 +195,7 @@ def finish(acc: dict[str, Any], returncode: int, stderr: str, elapsed_ms: int) -
         ok=ok,
         session_id=result.get("session_id") or acc.get("session_id"),
         duration_ms=int(result.get("duration_ms") or elapsed_ms),
-        turns=int(result.get("num_turns") or 0),
+        turns=int(result.get("num_turns") or len(acc.get("turn_ids", ()))),
         tokens_in=int(usage.get("input_tokens") or 0)
         + int(usage.get("cache_read_input_tokens") or 0)
         + int(usage.get("cache_creation_input_tokens") or 0),
@@ -221,20 +224,48 @@ async def run_turn(
 ) -> AsyncIterator[TurnEvent | TurnResult]:
     """Run one chat turn. Yields TurnEvents while streaming, then exactly one TurnResult.
 
-    Claude Code sometimes starts the session before our MCP server has connected (init shows
-    it "pending"), and then offers no tools. That attempt is killed right after the init
-    event, before any model call, and retried. A first turn retries with a fresh session id
+    A first turn that has to be restarted (see `stream_claude`) retries with a fresh session id
     (the killed attempt may have registered the old one); the TurnResult says which was used.
     """
     exe = shutil.which("claude")
     if exe is None:
         raise OrchestratorError("Claude Code CLI not found on PATH")
+    sid = [session_id]
+
+    def command(attempt: int) -> list[str]:
+        if attempt > 1 and not resume:
+            sid[0] = str(uuid.uuid4())
+        return build_command(exe, cfg, chat_id, sid[0], resume)
+
+    async for event in stream_claude(
+        command, workdir(cfg), prompt, cfg.turn_timeout_s, f"chat {chat_id}"
+    ):
+        if isinstance(event, TurnResult):
+            event.session_id = event.session_id or sid[0]
+        yield event
+
+
+async def stream_claude(
+    command: Callable[[int], list[str]],
+    cwd: Path,
+    prompt: str,
+    timeout_s: float,
+    label: str,
+    max_turns: int | None = None,
+) -> AsyncIterator[TurnEvent | TurnResult]:
+    """Run `claude -p` (stream-json) and yield TurnEvents, then exactly one TurnResult.
+
+    Claude Code sometimes starts the session before our MCP server has connected (init shows
+    it "pending"), and then offers no tools. That attempt is killed right after the init
+    event, before any model call, and retried (`command(attempt)` builds each attempt).
+    `max_turns` (model calls) is a hard cap: the process is stopped once it's exceeded.
+    """
     start = time.monotonic()
-    deadline = start + cfg.turn_timeout_s
+    deadline = start + timeout_s
     for attempt in range(1, MCP_CONNECT_ATTEMPTS + 1):
         proc = await asyncio.create_subprocess_exec(
-            *build_command(exe, cfg, chat_id, session_id, resume),
-            cwd=workdir(cfg),
+            *command(attempt),
+            cwd=cwd,
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
@@ -245,8 +276,8 @@ async def run_turn(
         await proc.stdin.drain()
         proc.stdin.close()
         stderr_task = asyncio.ensure_future(proc.stderr.read())
-        acc: dict[str, Any] = {"session_id": session_id}
-        retry = False
+        acc: dict[str, Any] = {}
+        retry = over_budget = False
         try:
             while True:
                 remaining = deadline - time.monotonic()
@@ -263,6 +294,9 @@ async def run_turn(
                         break
                 for event in events:
                     yield event
+                if max_turns is not None and len(acc.get("turn_ids", ())) > max_turns:
+                    over_budget = True
+                    break
             if retry:
                 proc.kill()
                 await proc.wait()
@@ -275,21 +309,26 @@ async def run_turn(
                     }
                     yield finish(acc, -1, "", int((time.monotonic() - start) * 1000))
                     return
-                log.info(
-                    "chat %s: MCP not connected at start (attempt %d), retrying", chat_id, attempt
-                )
-                if not resume:
-                    session_id = str(uuid.uuid4())
+                log.info("%s: MCP not connected at start (attempt %d), retrying", label, attempt)
                 await asyncio.sleep(0.5 * attempt)
                 continue
-            returncode = await proc.wait()
+            if over_budget:
+                proc.kill()
+                await proc.wait()
+                acc["result"] = {
+                    "is_error": True,
+                    "result": f"Stopped at the turn budget ({max_turns} turns).",
+                    "num_turns": max_turns,
+                }
+                returncode = -1
+            else:
+                returncode = await proc.wait()
         except TimeoutError:
             proc.kill()
             await proc.wait()
             acc["result"] = {
                 "is_error": True,
-                "result": f"The orchestrator took longer than {cfg.turn_timeout_s:.0f}s "
-                "and was stopped.",
+                "result": f"Claude took longer than {timeout_s:.0f}s and was stopped.",
             }
             returncode = -1
         except (asyncio.CancelledError, GeneratorExit):
@@ -297,7 +336,5 @@ async def run_turn(
                 proc.kill()
             raise
         stderr = (await stderr_task).decode(errors="replace")
-        result = finish(acc, returncode, stderr, int((time.monotonic() - start) * 1000))
-        result.session_id = acc.get("session_id") or session_id
-        yield result
+        yield finish(acc, returncode, stderr, int((time.monotonic() - start) * 1000))
         return

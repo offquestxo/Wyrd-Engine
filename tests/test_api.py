@@ -153,9 +153,9 @@ def test_plan_run_lifecycle_over_http(client: TestClient) -> None:
     with client:
         bad = client.post(
             "/api/plans",
-            json={"summary": "x", "steps": [{"agent": "researcher", "params": {"topic": "x"}}]},
+            json={"summary": "x", "steps": [{"agent": "researcher", "params": {}}]},
         )
-        assert bad.status_code == 422 and "Phase 6" in bad.json()["detail"]
+        assert bad.status_code == 422 and "story_id or topic" in bad.json()["detail"]
 
         plan = client.post(
             "/api/plans",
