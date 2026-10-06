@@ -164,3 +164,87 @@ async def test_connection_test_reports_auth_mode_and_oauth_setup_hint() -> None:
     result = await router.test_connection("gemini")
     assert result.auth == "oauth (ADC)" and not result.ok
     assert "Application Default Credentials" in result.detail
+
+
+class ExpiredCreds(FakeCreds):
+    def refresh(self, _request: Any) -> None:
+        from google.auth.exceptions import RefreshError
+
+        raise RefreshError("invalid_grant: Token has been expired or revoked.")
+
+
+async def test_expired_oauth_login_says_to_rerun_gcloud() -> None:
+    loads: list[int] = []
+
+    def loader() -> Any:
+        loads.append(1)
+        return ExpiredCreds(), None
+
+    p = GeminiOAuthProvider(loader=loader)
+    with pytest.raises(ProviderError) as exc:
+        await p.list_models()
+    assert "gcloud auth application-default login" in str(exc.value)
+    assert "once a week" in str(exc.value) and exc.value.status == 401
+    assert len(loads) == 2  # reloaded the ADC file once before giving up
+
+
+async def test_new_login_is_picked_up_without_restart() -> None:
+    from google.auth.exceptions import DefaultCredentialsError
+
+    from apps.api.providers import gemini_oauth
+
+    available: list[Any] = []
+
+    def loader() -> Any:
+        if not available:
+            raise DefaultCredentialsError("none")
+        return available[0], None
+
+    p = GeminiOAuthProvider(loader=loader)
+    assert p.configured is False
+    available.append(FakeCreds())
+    p._loaded_at -= gemini_oauth.RELOAD_ADC_EVERY_S + 1  # pretend 30 s passed
+    assert p.configured is True and p.quota_project == "adc-project"
+
+
+async def test_missing_oauth_credentials_are_logged_once_per_run(tmp_path: Any) -> None:
+    from google.auth.exceptions import DefaultCredentialsError
+
+    from apps.api.config import load_providers
+    from apps.api.providers.router import Router
+    from apps.api.runctx import current_run_logger, current_run_once
+
+    def missing() -> Any:
+        raise DefaultCredentialsError("none")
+
+    config = load_providers()
+    config.tasks["embed"] = [s for s in config.tasks["embed"] if s.provider in ("gemini", "nvidia")]
+    config.tasks["embed"].sort(key=lambda s: s.provider != "gemini")  # gemini first
+
+    class Nvidia:
+        name, configured = "nvidia", True
+
+        async def embed(self, **kw: Any) -> Any:
+            from apps.api.providers.base import EmbedResult
+
+            return EmbedResult(vectors=[[0.1]] * len(kw["texts"]), model=kw["model"])
+
+    router = Router(
+        config,
+        {
+            "gemini": GeminiOAuthProvider(loader=missing),  # type: ignore[dict-item]
+            "nvidia": Nvidia(),
+        },
+        None,
+    )
+    logged: list[str] = []
+    t1 = current_run_logger.set(lambda lvl, msg, data: logged.append(f"{lvl}: {msg}"))
+    t2 = current_run_once.set(set())
+    try:
+        await router.embed(["a"])
+        await router.embed(["b"])
+    finally:
+        current_run_logger.reset(t1)
+        current_run_once.reset(t2)
+    gemini_lines = [m for m in logged if m.startswith("warn: gemini skipped")]
+    assert len(gemini_lines) == 1 and "Application Default Credentials" in gemini_lines[0]

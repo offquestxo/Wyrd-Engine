@@ -23,7 +23,7 @@ from apps.api.events import bus
 from apps.api.jobs import JobRunner
 from apps.api.plans import PlanError, PlanIn, PlanService
 from apps.api.providers.base import ConnectionTest
-from apps.api.providers.router import get_router
+from apps.api.providers.router import gemini_uses_oauth, get_router
 from apps.api.settings import get_settings, mask_secret
 from apps.api.settings_store import auto_approve_key, get_setting, set_setting
 from apps.api.sources import youtube
@@ -134,12 +134,40 @@ def _key_status(env: str, value: str, provider: str | None) -> str:
     return "set"
 
 
+def _gemini_oauth_status(item: dict[str, Any]) -> dict[str, Any]:
+    """In OAuth mode the Gemini row describes the ADC login, not an API key."""
+    router = get_router()
+    provider = router.providers.get("gemini")
+    last: ConnectionTest | None = state["tests"].get("gemini")
+    configured = provider is not None and provider.configured
+    error = router.auth_error("gemini")
+    if not configured:
+        status, note = "missing", getattr(provider, "unconfigured_detail", None)
+    elif error or (last is not None and not last.ok):
+        status, note = "failing", error or (last.detail if last else None)
+    else:
+        status, note = "set", None
+    project = getattr(provider, "quota_project", "") if provider else ""
+    return {
+        **item,
+        "env": "GEMINI_AUTH=oauth",
+        "status": status,
+        "preview": f"ADC · {project}" if project else "ADC",
+        "testable": True,
+        "last_test": last.model_dump() if last else None,
+        "note": note,
+    }
+
+
 @app.get("/api/keys")
 async def keys_status() -> list[dict[str, Any]]:
     """Status of every .env value. Secrets are only ever shown masked."""
     settings = get_settings()
     out = []
     for item in KEYS:
+        if item["env"] == "GEMINI_API_KEY" and gemini_uses_oauth():
+            out.append(_gemini_oauth_status(item))
+            continue
         value = settings.key_for(item["env"]).strip().strip('"')
         provider = item["provider"]
         last: ConnectionTest | None = state["tests"].get(provider) if provider else None

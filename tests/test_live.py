@@ -130,3 +130,42 @@ async def test_router_score_items_live() -> None:
     )
     assert scores and scores[0].id == "cc" and 1 <= scores[0].drama <= 10
     print("router events:", [(e.kind, e.provider) for e in router.events])
+
+
+async def test_gemini_serves_its_routes_live() -> None:
+    """Gemini is primary for extraction/outliers (and an embed fallback) when its auth works."""
+    from sqlmodel import Session, col, select
+
+    from apps.api.db.models import ProviderUsage
+    from apps.api.db.session import get_engine
+    from apps.api.providers.schemas import VideoForAnalysis
+
+    router = get_router()
+    gemini = router.providers["gemini"]
+    if not gemini.configured or not (await router.test_connection("gemini")).ok:
+        pytest.skip("Gemini credentials not working")
+    doc = "Circuit City Stores, Inc. filed its Form 10-K on April 28, 2008."
+    extraction = await router.extract_from_document(doc, "When was the 10-K filed?")
+    assert extraction.found and extraction.extracts
+    analyses = await router.analyze_outliers(
+        [
+            VideoForAnalysis(
+                video_id="v1",
+                channel="Company Man",
+                title="The Decline of Circuit City",
+                views=1_000_000,
+                outlier_score=4.0,
+                is_short=False,
+            )
+        ]
+    )
+    assert analyses and analyses[0].video_id == "v1"
+    vectors = await gemini.embed(
+        model=router.config.model("gemini", "embed").id, texts=["Circuit City"], dimensions=2048
+    )
+    assert len(vectors.vectors[0]) == 2048
+    with Session(get_engine()) as s:
+        rows = s.exec(select(ProviderUsage).order_by(col(ProviderUsage.id).desc()).limit(10)).all()
+    served = {(r.provider, r.task) for r in rows if r.ok}
+    assert ("gemini", "extract_from_document") in served
+    assert ("gemini", "analyze_outliers") in served

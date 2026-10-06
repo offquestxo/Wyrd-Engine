@@ -174,6 +174,7 @@ export interface KeyStatus {
   preview: string
   testable: boolean
   last_test: ConnectionTest | null
+  note?: string | null
 }
 
 export interface ConnectionTest {

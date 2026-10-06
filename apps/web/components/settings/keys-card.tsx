@@ -74,7 +74,10 @@ export function KeysCard() {
             {data.map((k) => (
               <TableRow key={k.env}>
                 <TableCell className="font-mono text-xs">{k.env}</TableCell>
-                <TableCell className="text-xs text-muted-foreground">{k.purpose}</TableCell>
+                <TableCell className="max-w-xs text-xs whitespace-normal text-muted-foreground">
+                  {k.purpose}
+                  {k.note && <p className="mt-1 text-[11px] leading-4 text-warning">{k.note}</p>}
+                </TableCell>
                 <TableCell>
                   <Badge variant="outline" className={cn("font-mono text-[10px] uppercase", STATUS_STYLE[k.status])}>
                     {k.status}

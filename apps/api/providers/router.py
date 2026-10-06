@@ -45,7 +45,7 @@ from apps.api.providers.schemas import (
     VideoForAnalysis,
 )
 from apps.api.providers.usage import UsageLog
-from apps.api.runctx import log_to_current_run
+from apps.api.runctx import log_once_to_current_run, log_to_current_run
 
 log = logging.getLogger("wyrd.router")
 
@@ -150,6 +150,7 @@ class Router:
         self.events: deque[RouterEvent] = deque(maxlen=500)
         self._clock = clock
         self._auth_failed_at: dict[str, float] = {}  # provider → time of last 401/403
+        self._auth_errors: dict[str, str] = {}  # provider → that error's message
 
     # ------------------------------------------------------------------ plumbing
     def _event(self, task: str, kind: str, provider: str, detail: str) -> None:
@@ -198,10 +199,24 @@ class Router:
         for step in self.config.tasks.get(task, []):
             provider = self.providers.get(step.provider)
             if provider is None or not provider.configured:
-                self._event(task, "skip", step.provider, "not configured (missing API key)")
+                detail = getattr(
+                    provider, "unconfigured_detail", "not configured (missing API key)"
+                )
+                self._event(task, "skip", step.provider, detail)
+                if provider is not None and hasattr(provider, "unconfigured_detail"):
+                    # Credentials the owner set up but that went missing: say so in the run log.
+                    log_once_to_current_run(
+                        f"skip:{step.provider}", "warn", f"{step.provider} skipped: {detail}"
+                    )
                 continue
             if self.auth_blocked(step.provider):
-                self._event(task, "skip", step.provider, "key rejected recently (401/403)")
+                self._event(task, "skip", step.provider, "credentials rejected recently (401/403)")
+                log_once_to_current_run(
+                    f"blocked:{step.provider}",
+                    "warn",
+                    f"{step.provider} skipped for now: "
+                    f"{self._auth_errors.get(step.provider, '401/403')}",
+                )
                 continue
             near = False
             if self.usage is not None:
@@ -219,6 +234,9 @@ class Router:
                 )
             usable.append((near, step))
         return [step for _, step in sorted(usable, key=lambda pair: pair[0])]
+
+    def auth_error(self, provider: str) -> str | None:
+        return self._auth_errors.get(provider) if self.auth_blocked(provider) else None
 
     def auth_blocked(self, provider: str) -> bool:
         failed_at = self._auth_failed_at.get(provider)
@@ -276,6 +294,7 @@ class Router:
                     errors.append(str(e))
                     if e.status in (401, 403):
                         self._auth_failed_at[step.provider] = self._clock()
+                        self._auth_errors[step.provider] = str(e)
                     if e.retryable and attempt + 1 < self.config.retry.max_attempts:
                         delay = self._backoff(attempt, e)
                         self._event(task, "retry", step.provider, f"{e} (waiting {delay:.1f}s)")

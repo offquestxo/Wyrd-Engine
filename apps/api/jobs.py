@@ -22,7 +22,7 @@ from sqlmodel import Session, col, select
 from apps.api.agents.registry import AGENTS, AgentFn
 from apps.api.db.models import AgentRun, RunLog, RunStatus, utcnow
 from apps.api.events import EventBus
-from apps.api.runctx import current_run_logger
+from apps.api.runctx import current_run_logger, current_run_once
 
 log = logging.getLogger("wyrd.jobs")
 
@@ -191,6 +191,7 @@ class JobRunner:
         token = current_run_logger.set(
             lambda lvl, msg, data: self.write_log(run_id, lvl, msg, data)
         )
+        once_token = current_run_once.set(set())
         status, result, error = RunStatus.FAILED.value, None, None
         try:
             self.write_log(run_id, "info", f"Started @{run.agent}", {"params": run.params})
@@ -206,6 +207,7 @@ class JobRunner:
             self.write_log(run_id, "error", error, {"traceback": traceback.format_exc(limit=5)})
         finally:
             current_run_logger.reset(token)
+            current_run_once.reset(once_token)
             self._tasks.pop(run_id, None)
             with Session(self.engine) as s:
                 row = s.get(AgentRun, run_id)
