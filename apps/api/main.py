@@ -26,6 +26,7 @@ from apps.api.db.models import AgentRun, RunLog
 from apps.api.db.session import get_engine
 from apps.api.events import bus
 from apps.api.jobs import JobRunner
+from apps.api.notion_sync import NotionSync
 from apps.api.plans import PlanError, PlanIn, PlanService
 from apps.api.providers.base import ConnectionTest
 from apps.api.providers.router import gemini_uses_oauth, get_router
@@ -90,6 +91,9 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         engine, bus, plans, load_engine().orchestrator, cached_claude_status
     )
     mcp_server.bind(plans)
+    notion = NotionSync(engine, bus)
+    state["notion"] = notion
+    notion.start()
     await runner.start()
     backfill = asyncio.create_task(memory.backfill(engine), name="memory-backfill")
     try:
@@ -99,10 +103,11 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
             yield
     finally:
         backfill.cancel()
+        await notion.stop()
         await state["chats"].stop()
         await runner.stop()
         mcp_server.bind(None)
-        for key in ("runner", "plans", "chats"):
+        for key in ("runner", "plans", "chats", "notion"):
             state.pop(key, None)
 
 
@@ -442,6 +447,40 @@ async def open_dossier_file(story_id: int) -> dict[str, Any]:
     args = [opener, "-R", str(path)] if opener.endswith("/open") else [opener, str(path.parent)]
     await asyncio.create_subprocess_exec(*args)
     return {"ok": True, "path": str(path)}
+
+
+# ---------------------------------------------------------------------------- notion
+def _notion() -> NotionSync:
+    service: NotionSync | None = state.get("notion")
+    if service is None:
+        raise HTTPException(503, "Notion sync service is not running")
+    return service
+
+
+class AutoSyncIn(BaseModel):
+    auto_sync: bool
+
+
+@app.get("/api/notion")
+async def notion_status() -> dict[str, Any]:
+    return _notion().status()
+
+
+@app.post("/api/notion/sync")
+async def notion_sync_now() -> dict[str, Any]:
+    """Pull Status/Notes from Notion, then push changed stories. Works only when configured."""
+    service = _notion()
+    if not service.configured():
+        raise HTTPException(409, "Notion isn't configured: add NOTION_TOKEN and NOTION_DATABASE_ID")
+    return (await service.sync()).model_dump()
+
+
+@app.put("/api/notion/auto-sync")
+async def notion_auto_sync(body: AutoSyncIn) -> dict[str, Any]:
+    service = _notion()
+    service.set_auto_sync(body.auto_sync)
+    bus.publish("settings.changed", notion_auto_sync=body.auto_sync)
+    return service.status()
 
 
 # ---------------------------------------------------------------------------- outliers

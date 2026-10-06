@@ -150,10 +150,19 @@ class OrchestratorConfig(BaseModel):
     warn_ratio: float = Field(default=0.8, gt=0, le=1)
 
 
+class NotionConfig(BaseModel):
+    version: str = "2026-03-11"  # Notion-Version header
+    min_interval_s: float = Field(default=0.4, ge=0)  # ≤ 3 requests/s average
+    max_retries: int = Field(default=4, ge=0)
+    push_debounce_s: float = Field(default=5.0, ge=0)
+    pull_interval_min: float = Field(default=10.0, gt=0)
+
+
 class EngineConfig(BaseModel):
     jobs: JobsConfig = Field(default_factory=JobsConfig)
     usage: UsageConfig = Field(default_factory=UsageConfig)
     orchestrator: OrchestratorConfig = Field(default_factory=OrchestratorConfig)
+    notion: NotionConfig = Field(default_factory=NotionConfig)
 
 
 def load_engine(config_dir: Path | None = None) -> EngineConfig:
