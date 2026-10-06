@@ -61,6 +61,9 @@ You are building and maintaining the wyrd.exe story engine: a local app that fin
   extraction/outliers), NVIDIA ✅, OpenRouter ✅, YouTube ✅, CourtListener token set.
   **Gemini: unavailable** — `AQ.` key rejected (401); OAuth mode (`GEMINI_AUTH=oauth`) is built
   but this machine has no gcloud ADC credentials. Gemini stays in routes, skipped. See docs/decisions.md.
-- Phase 1 (UI shell): **done**, awaiting review. All pages plus Settings (real data), command palette,
-  live panel over SSE, PWA. Pages other than Settings use sample data (`apps/web/lib/mock.ts`).
-- Next: Phase 2 (jobs, runs, dashboard) after "proceed".
+- Phase 1 (UI shell): **done**. All pages plus Settings (real data), command palette, live panel over
+  SSE, PWA. Chat/Stories/Research/Outliers use sample data (`apps/web/lib/mock.ts`).
+- Phase 2 (jobs, runs, dashboard): **done**, awaiting review. Plans → approved runs (`plans.py`),
+  DB-backed runner with cancellation (`jobs.py`), live logs over SSE, run detail, real quota meters
+  (`/api/usage`), `@demo` test agent. Home, run detail, and live panel use real data.
+- Next: Phase 3 (@scout) after "proceed".

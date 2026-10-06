@@ -4,7 +4,7 @@ The story engine for **wyrd.exe**: it finds, reads, and researches true business
 
 `SPEC.md` is the source of truth for what gets built; `CLAUDE.md` holds the working rules.
 
-**Status:** Phase 0 (foundation) and Phase 1 (UI shell) are complete. Pages other than Settings show sample data (marked **SAMPLE DATA**) until their agents land in Phases 2–6.
+**Status:** Phases 0–2 are complete: foundation, UI shell, and the job system (plans → approved runs with live logs, cancellation, and real quota meters on Home). Chat, Stories, Research, and Outliers show sample data (marked **SAMPLE DATA**) until their agents land in Phases 3–6. Use **Test run** on Home to watch a demo agent run end to end.
 
 ## Requirements
 
