@@ -17,6 +17,8 @@ Resume note in case a session hits the usage limit. Newest status at the bottom 
 ## Checkpoints
 - [x] Pushed Phase 4 commits (origin == local at 4e10546)
 - [x] Verified `claude --help` (2.1.196) and FastMCP 4.0.11 docs
-- [ ] Backend: migration, memory, MCP server, orchestrator runner, chat service, endpoints, tests
-- [ ] Frontend: same-origin proxy, real chat UI, plan cards, result cards, @-autocomplete, meter
-- [ ] Live acceptance (once): two-step plan, summary, recall in new chat, @scout fast path
+- [x] Backend: migration, memory, MCP server, orchestrator runner, chat service, endpoints, tests (75f8422)
+- [x] Frontend: same-origin proxy, real chat UI, plan cards, result cards, @-autocomplete, meter (4253295)
+- [x] Live acceptance (once): two-step plan, summary, recall in new chat, @scout fast path (see decisions.md)
+- [x] Docs: decisions.md Phase 5, CLAUDE.md status, README chat section
+- [ ] Owner review; push after approval

@@ -232,3 +232,62 @@ The owner needs to activate the free Experiment plan (or check limits) at `admin
 **Seed handle fix:** `@companyman` is a different, tiny channel. Company Man is `@companyman114` (1.8M subscribers). Channel lookups now log subscriber and video counts so a wrong handle is obvious.
 
 **Create story from outlier:** makes an Inbox story with `outlier_ref`, the analysis angle as an (unverified) hook, and a YouTube source. Calling it twice for the same video doesn't create a duplicate.
+
+## Phase 5: orchestrator + chat (2026-10-06)
+
+**Claude Code headless flags** (checked with `claude --help`, v2.1.196). One `claude -p` process per chat turn, with the prompt sent on stdin:
+
+| Flag | Why |
+|---|---|
+| `-p --output-format stream-json --verbose --include-partial-messages` | Streamed events: `text_delta`s for live text, `assistant` blocks for tool calls, `rate_limit_event`, and a final `result` (duration, `num_turns`, usage, `session_id`) |
+| `--session-id <uuid>` on the first turn, `--resume <uuid>` after | One Claude session per chat. We generate the UUID and store it on `chats.claude_session_id` only after a successful turn |
+| `--model sonnet --effort low` | From `engine.yaml` `orchestrator`, to keep Pro usage down |
+| `--system-prompt <prompts/orchestrator.md>` | Replaces the default system prompt. The agent list and parameters come from the params models, and channel handles from `channels.yaml`, so the prompt can't drift from the code |
+| `--mcp-config <json> --strict-mcp-config` | Only the engine's MCP server, over HTTP with `X-Wyrd-Chat` and `X-Wyrd-Token` headers |
+| `--tools ""` | No built-in tools: no shell, no file reads or edits, no web |
+| `--allowedTools mcp__wyrd__…` | Our 7 tools, pre-approved. The list is generated from the MCP registry |
+| `--permission-mode dontAsk` | Anything else is denied, never prompted |
+| `--setting-sources "" --disable-slash-commands` | No user hooks, plugins or skills in the orchestrator |
+
+- The working directory is `~/.local/share/wyrd/orchestrator` (configurable), outside the repo, so the project's CLAUDE.md isn't loaded into every chat turn. Claude Code keys saved sessions by working directory, so it must stay fixed.
+- **MCP connect race:** sometimes the session starts before the MCP server connects. The init event then shows it as `pending`, with no tools, and Claude writes fake tool calls as text (seen once live). Fix: if init doesn't show `wyrd` as `connected`, the process is killed right away, before any model call, and retried up to 3 times. A first turn retries with a fresh session id. If it still fails, the turn ends with a clear error rather than a made-up reply. An undocumented `MCP_CONNECTION_NONBLOCKING` env var might control this, but it isn't relied on.
+- **Rate-limit signal:** Claude Code's `rate_limit_event` (`allowed` / `allowed_warning` / `rejected`, plus reset time) is the only real Pro-plan signal available. The last one is stored in settings and shown on the Claude meter.
+
+**MCP server** (FastMCP 4.0.11, `apps/api/mcp_server.py`):
+- It's mounted inside FastAPI at `/mcp` (streamable HTTP) rather than spawned over stdio. That way it shares the engine's DB, plan service and SSE bus, so a proposed plan appears in the UI immediately.
+- `/mcp` is deliberately not under `/api`, so the web proxy never exposes it.
+- A per-process random token guards the whole mount at the ASGI level, so only sessions the engine spawned can call it. The first version checked the token only in tools that read the chat id; a live check caught this.
+- Tools this phase: `propose_plan`, `list_stories`, `get_story`, `update_story`, `search_memory`, `list_runs`, `get_run`. Adding a tool is one `@tool` function, and the allowlist is derived from it. `source_*`, `extract_from_document` and `save_dossier` come in Phase 6.
+- `update_story` applies series/format/notes/hook directly. A **status** change instead creates a plan with a hidden `story_update` step, so it goes through the normal approval (and auto-approve) flow.
+- Plan steps accept `"@scout"` as well as `"scout"`. Claude used the `@` form live, and the rejected call cost a turn.
+
+**@mention fast path:** `@scout` / `@outlier` → Groq `parse_mention` → a single-step plan, with no Claude call. It falls back to the orchestrator if parsing fails, the parser picks a different agent, it isn't confident, or the parameters don't validate. The reason is stored on the message and shown under it. `@researcher` says it isn't built yet (Phase 6) without calling anything.
+
+**Results loop:** when an approved plan finishes, the chat gets a result card: per-step summary, top 5 items linking to Stories, Outliers or the run, and YouTube units. It also gets a compact `[engine] Plan #N …` turn so the orchestrator can summarize and suggest next steps.
+- In chats that only used @mentions (no Claude session yet), the results aren't sent to Claude right away. They're prepended to the next orchestrator turn instead, so a fast-path run never spends Claude usage on its own.
+- Results of `story_update`/`demo` steps never trigger a summary.
+
+**Memory:** `search_memory` = FTS5 (bm25) over messages, stories and dossiers, plus cosine similarity over `embeddings` vectors of the same model as the query vector (NVIDIA first, Gemini fallback via the router). The two rankings are merged with reciprocal rank fusion.
+- User, assistant and result messages are embedded in the background after they're saved. A startup backfill covers anything missed.
+- The current chat's own messages are excluded, since Claude already has them.
+- If embeddings fail, it falls back to keyword search alone and says so (`semantic: false`).
+
+**Claude meter:** each orchestrator turn is a `provider_usage` row (`provider=claude`, duration in `latency_ms`, new `turns` and `chat_id` columns). The meter counts chat turns plus Claude-agent runs per day against a soft cap. The cap defaults to `engine.yaml` `orchestrator.daily_soft_cap` (40), can be overridden in Settings → Agents, warns at 80%, and never blocks. It replaces `providers.yaml` `claude.limits.daily_soft_cap_runs`.
+
+**Browser → API through the web app's origin** (the Phase 4 note): Next.js `rewrites` forward `/api/*` to `127.0.0.1:8000`. `API_BASE` defaults to same-origin, and `NEXT_PUBLIC_API_URL` still overrides it. SSE was verified through the proxy: an event published after connecting arrived over `:3000/api/events`. `compress: false` keeps a future `next start` from gzip-buffering SSE.
+
+**Frontend:**
+- Live chat updates are kept in a timestamped overlay that is merged over the last fetch, never written into SWR's cache. A local `mutate()` while a fetch was in flight made SWR discard the fetch: SSE replays recent events right after connecting, which left threads blank and plan cards missing. Both were seen live.
+- The app shell now works at phone width: the sidebar opens as a sheet from a top bar, and the Live panel is an overlay below `lg`.
+- Plan cards show each step's providers (route order from `providers.yaml`), YouTube estimate and Claude use.
+- `lib/mock.ts` now holds only the Research sample (Phase 6).
+
+**Live acceptance (2026-10-06):**
+- New chat: "find me 10 fraud stories and check what's working on Company Man" produced **one plan with two steps**: @scout (`mode=both, limit=10, series=Fraud Files`) and @outlier (`channels=@companyman114`).
+- Approved, both runs succeeded:
+  - @scout: 10 stories, 75 items scored in 46 s, 20 search calls / 40 units.
+  - @outlier: 2 units, matching the estimate of 2.
+- The orchestrator summarized the results with next steps.
+- A **new chat** recalled them through `search_memory` + `list_runs` + `get_run`.
+- `@scout 5 news stories about restaurant chains` and `@outlier scan @MagnatesMedia shorts only` each produced a plan card with **no Claude call** (Claude row count unchanged at 5). Both test plans were cancelled.
+- Claude usage for all of Phase 5's live testing: 5 calls, 11 turns, 40 s, all on Sonnet.
