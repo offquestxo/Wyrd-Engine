@@ -114,3 +114,21 @@ def load_channels(config_dir: Path | None = None) -> ChannelsConfig:
 
 def load_scoring(config_dir: Path | None = None) -> ScoringConfig:
     return ScoringConfig.model_validate(_read_yaml("scoring.yaml", config_dir))
+
+
+class JobsConfig(BaseModel):
+    max_concurrent_runs: int = Field(default=2, ge=1, le=16)
+    poll_interval_s: float = Field(default=2.0, gt=0)
+
+
+class UsageConfig(BaseModel):
+    day_reset_timezone: str = "America/Los_Angeles"
+
+
+class EngineConfig(BaseModel):
+    jobs: JobsConfig = Field(default_factory=JobsConfig)
+    usage: UsageConfig = Field(default_factory=UsageConfig)
+
+
+def load_engine(config_dir: Path | None = None) -> EngineConfig:
+    return EngineConfig.model_validate(_read_yaml("engine.yaml", config_dir))

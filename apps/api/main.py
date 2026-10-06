@@ -11,19 +11,24 @@ from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.sse import EventSourceResponse, ServerSentEvent
 from pydantic import BaseModel
+from sqlmodel import Session, col, select
 
 from apps.api import sources
-from apps.api.agents.registry import AGENTS, AgentInfo
-from apps.api.config import load_providers
+from apps.api.agents.registry import AGENTS
+from apps.api.config import load_engine, load_providers
 from apps.api.config_files import ConfigError, ConfigFile, read_config, write_config
+from apps.api.db.models import AgentRun, RunLog
 from apps.api.db.session import get_engine
 from apps.api.events import bus
+from apps.api.jobs import JobRunner
+from apps.api.plans import PlanError, PlanIn, PlanService
 from apps.api.providers.base import ConnectionTest
 from apps.api.providers.router import get_router
 from apps.api.settings import get_settings, mask_secret
 from apps.api.settings_store import auto_approve_key, get_setting, set_setting
 from apps.api.sources import youtube
 from apps.api.system import ClaudeStatus, check_claude_cli
+from apps.api.usage_report import build_report
 
 state: dict[str, Any] = {"tests": {}}
 
@@ -48,9 +53,24 @@ KEYS: list[dict[str, Any]] = [
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-    get_engine()  # creates / migrates data/wyrd.db
+    engine = get_engine()  # creates / migrates data/wyrd.db
     state["claude"] = await check_claude_cli()
-    yield
+    jobs_cfg = load_engine().jobs
+    runner = JobRunner(
+        engine,
+        bus,
+        max_concurrent=jobs_cfg.max_concurrent_runs,
+        poll_interval_s=jobs_cfg.poll_interval_s,
+    )
+    state["runner"] = runner
+    state["plans"] = PlanService(engine, bus, runner)
+    await runner.start()
+    try:
+        yield
+    finally:
+        await runner.stop()
+        state.pop("runner", None)
+        state.pop("plans", None)
 
 
 app = FastAPI(title="wyrd.exe story engine", version="0.1.0", lifespan=lifespan)
@@ -175,34 +195,135 @@ async def test_provider(name: str) -> ConnectionTest:
 
 
 # ---------------------------------------------------------------------------- agents
-class AgentSettings(AgentInfo):
-    auto_approve: bool
-
-
 class AutoApproveUpdate(BaseModel):
     auto_approve: bool
 
 
+def _agent_view(name: str) -> dict[str, Any]:
+    return AGENTS[name].public() | {
+        "auto_approve": bool(get_setting(get_engine(), auto_approve_key(name), False))
+    }
+
+
 @app.get("/api/agents")
-async def list_agents() -> list[AgentSettings]:
-    engine = get_engine()
-    return [
-        AgentSettings(
-            **info.model_dump(),
-            auto_approve=bool(get_setting(engine, auto_approve_key(name), False)),
-        )
-        for name, info in AGENTS.items()
-    ]
+async def list_agents() -> list[dict[str, Any]]:
+    return [_agent_view(name) for name in AGENTS]
 
 
 @app.put("/api/agents/{name}/auto-approve")
-async def set_auto_approve(name: str, body: AutoApproveUpdate) -> AgentSettings:
+async def set_auto_approve(name: str, body: AutoApproveUpdate) -> dict[str, Any]:
     info = AGENTS.get(name)
     if info is None or not info.available:
         raise HTTPException(404, f"no available agent named {name!r}")
     set_setting(get_engine(), auto_approve_key(name), body.auto_approve)
     bus.publish("settings.changed", agent=name, auto_approve=body.auto_approve)
-    return AgentSettings(**info.model_dump(), auto_approve=body.auto_approve)
+    return _agent_view(name)
+
+
+# ---------------------------------------------------------------------------- plans
+def _plans() -> PlanService:
+    service: PlanService | None = state.get("plans")
+    if service is None:
+        raise HTTPException(503, "job runner is not running")
+    return service
+
+
+class ApproveIn(BaseModel):
+    # step order → replacement params (from the plan card's Edit form)
+    edits: dict[int, dict[str, Any]] | None = None
+
+
+@app.get("/api/plans")
+async def list_plans(status: str | None = None, limit: int = 20) -> list[dict[str, Any]]:
+    return _plans().list(status=status, limit=min(limit, 100))
+
+
+@app.get("/api/plans/{plan_id}")
+async def get_plan(plan_id: int) -> dict[str, Any]:
+    plan = _plans().get(plan_id)
+    if plan is None:
+        raise HTTPException(404, f"no plan {plan_id}")
+    return plan
+
+
+@app.post("/api/plans")
+async def create_plan(body: PlanIn) -> dict[str, Any]:
+    try:
+        return await _plans().create(body)
+    except PlanError as e:
+        raise HTTPException(422, str(e)) from e
+
+
+@app.post("/api/plans/{plan_id}/approve")
+async def approve_plan(plan_id: int, body: ApproveIn | None = None) -> dict[str, Any]:
+    try:
+        return await _plans().approve(plan_id, edits=body.edits if body else None)
+    except PlanError as e:
+        raise HTTPException(409, str(e)) from e
+
+
+@app.post("/api/plans/{plan_id}/cancel")
+async def cancel_plan(plan_id: int) -> dict[str, Any]:
+    try:
+        return await _plans().cancel(plan_id)
+    except PlanError as e:
+        raise HTTPException(404, str(e)) from e
+
+
+# ---------------------------------------------------------------------------- runs
+LOG_TAIL = 3
+
+
+@app.get("/api/runs")
+async def list_runs(status: str | None = None, limit: int = 20) -> list[dict[str, Any]]:
+    with Session(get_engine()) as s:
+        stmt = select(AgentRun).order_by(col(AgentRun.id).desc()).limit(min(limit, 100))
+        if status:
+            stmt = stmt.where(col(AgentRun.status).in_(status.split(",")))
+        runs = s.exec(stmt).all()
+        out = []
+        for run in runs:
+            tail = s.exec(
+                select(RunLog)
+                .where(RunLog.run_id == run.id)
+                .order_by(col(RunLog.id).desc())
+                .limit(LOG_TAIL)
+            ).all()
+            out.append(
+                run.model_dump(mode="json")
+                | {"log_tail": [t.model_dump(mode="json") for t in reversed(tail)]}
+            )
+        return out
+
+
+@app.get("/api/runs/{run_id}")
+async def get_run(run_id: int) -> dict[str, Any]:
+    with Session(get_engine()) as s:
+        run = s.get(AgentRun, run_id)
+        if run is None:
+            raise HTTPException(404, f"no run {run_id}")
+        logs = s.exec(select(RunLog).where(RunLog.run_id == run_id).order_by(col(RunLog.id))).all()
+        return run.model_dump(mode="json") | {
+            "logs": [entry.model_dump(mode="json") for entry in logs]
+        }
+
+
+@app.post("/api/runs/{run_id}/cancel")
+async def cancel_run(run_id: int) -> dict[str, Any]:
+    runner: JobRunner | None = state.get("runner")
+    if runner is None:
+        raise HTTPException(503, "job runner is not running")
+    run = await runner.cancel(run_id)
+    if run is None:
+        raise HTTPException(404, f"no run {run_id}")
+    return run.model_dump(mode="json")
+
+
+# ---------------------------------------------------------------------------- usage
+@app.get("/api/usage")
+async def usage_today() -> dict[str, Any]:
+    statuses = {k["provider"]: k["status"] for k in await keys_status() if k["provider"]}
+    return build_report(get_engine(), load_providers(), load_engine(), statuses)
 
 
 # ---------------------------------------------------------------------------- config files

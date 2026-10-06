@@ -14,6 +14,7 @@ from pydantic import BaseModel, ValidationError
 
 from apps.api.config import (
     ChannelsConfig,
+    EngineConfig,
     ProvidersConfig,
     ScoringConfig,
     SourcesConfig,
@@ -40,6 +41,7 @@ VALIDATORS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "sources": SourcesConfig.model_validate,
     "channels": ChannelsConfig.model_validate,
     "scoring": ScoringConfig.model_validate,
+    "engine": EngineConfig.model_validate,
 }
 
 
