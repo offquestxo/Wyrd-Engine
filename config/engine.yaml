@@ -19,3 +19,12 @@ orchestrator:
   turn_timeout_s: 300         # a chat turn is killed after this
   daily_soft_cap: 40          # Claude calls per day (chat turns + Claude agent runs); Settings overrides
   warn_ratio: 0.8             # meter turns amber at this share of the cap
+
+notion:
+  # Optional Notion mirror of the stories table (SPEC §8). Needs NOTION_TOKEN and
+  # NOTION_DATABASE_ID in .env; with neither set, sync is off and nothing else changes.
+  version: "2026-03-11"       # Notion-Version header (developers.notion.com/reference/versioning)
+  min_interval_s: 0.4         # pacing between requests; Notion allows ~3 requests/s on average
+  max_retries: 4              # on 429 (honouring Retry-After) and 5xx, with backoff + jitter
+  push_debounce_s: 5          # auto-sync: push this long after the last story change
+  pull_interval_min: 10       # auto-sync: pull Status/Notes from Notion this often
