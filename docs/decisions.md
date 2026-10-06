@@ -360,3 +360,42 @@ The owner needs to activate the free Experiment plan (or check limits) at `admin
 - **Second opinion** (NVIDIA): 7 flags, 0 high. They were resolved as 4 softened ("#2 retailer" claims, causal language), 1 removed (CarMax market value), 1 rewritten (the "60 days" hook), and 1 fixed (the Blockbuster excerpt, which was then moved by the check).
 - **Exported** to `research/circuit-city/`, and viewable on the Research page.
 - **Source notes:** Circuit City has no EDGAR XBRL facts (pre-2009), so financials came from the 10-K text. One Google News link and one CourtListener docket page couldn't be fetched (the fail-fast notes above came from this).
+
+## Phase 6 review fixes (2026-10-06)
+
+**Claim-vs-excerpt support check:** an excerpt that exists in the source can still be stretched by its claim (v1 said "highest-paid hourly" where the excerpt says "better-paid").
+- New router task `check_support` (`prompts/claim_support.md`): Groq `gpt-oss-120b` first, NVIDIA as fallback. Groq's 20B model wrongly called a date in an excerpt unsupported during testing, so the larger model is primary.
+- It asks whether the excerpt supports every factual part of the claim, for Timeline items, Key Numbers, Key People and the Twist, but only rows that already passed the excerpt check.
+- Unsupported details are trimmed when what's left still stands (and the trim is noted in Open Questions). Otherwise the row moves to Open Questions.
+- If every provider fails, rows are kept on the excerpt check alone and the dossier records "support check unavailable". The check runs in the second-opinion pre-check and again on save.
+- Observed: when Groq hits its 8K tokens/minute limit, NVIDIA takes over and is noticeably more lenient (0 trims where Groq trimmed 3 on the same rows). The checker that ran is in `provider_usage`.
+
+**Prose numbers:**
+- Spelled-out numbers are converted to digits for checking ("eighteen" → 18).
+- Spans like "N days/weeks/months/years (later)" and "N-year-old" must match the gap between two dated Timeline items. The rounded gap must equal N, or be within ±1 with "about/nearly/over…". These spans are excluded from the plain number check.
+- Timeline dates are parsed from YYYY[-MM[-DD]], "Nov 2008" and "November 10, 2008". A year-only date can only anchor gaps measured in years.
+- Known limit: the check can't tell which two events the prose means. Any matching pair of dates passes.
+
+**Interpretation stated as fact:**
+- The second opinion now classifies each flag (`unsupported`, `interpretation`, `superlative`, `defamation`, `weak_source`) and reviews the prose sections too. It's told not to list fine claims, or labelled interpretations that are acceptable as written.
+- `save_dossier` refuses while there are fewer `second_opinion_resolutions` than interpretation or high-severity flags. The new resolution action is `labelled_interpretation`.
+- The researcher prompt says interpretations must read "Our read: …" or go to Open Questions.
+- NVIDIA still flags some labelled interpretations; these are resolved as `labelled_interpretation`.
+
+**Circuit City v2** (v1 kept in history), built from v1 with the owner's fixes, each sourced:
+- Bankrupt "about 19 months" after the layoffs (Mar 28, 2007 → Nov 10, 2008).
+- Revival reported January 2016; online relaunch August 22, 2018.
+- The Blockbuster April 2008 bid ($1B–$1.3B), in Wikipedia's wording.
+- 712 Superstores + 9 outlet stores at **October 31, 2008**, from the Nov 10, 2008 8-K. The brief said "before closures"; the 8-K dates the count October 31.
+- 654 = FY2007 total stores (642 Superstores + 12 others).
+- 43,011 domestic employees at Feb 28, 2007 (FY2007 10-K).
+- 155 closings announced Nov 4, 2008; Chapter 11 filed Nov 10.
+- CarMax "spun off to shareholders".
+- "Best Buy drove Circuit City into bankruptcy" labelled as interpretation and listed in Open Questions.
+- Unsourced "missing the housing boom" and "customer service deteriorated" moved to Open Questions.
+- Layoff rows reworded to match "better-paid associates".
+- 10-K table excerpts now include the "(Amounts in thousands …)" header, and the net loss uses the 10-K's own sentence.
+
+Results: 41/41 claims pass the excerpt check, the support check (Groq 120B) makes 0 trims and 0 moves, and no prose number is unverified.
+
+**1988 Best Buy offer:** Wikipedia cites Alan Wurtzel's 2012 memoir *Good to Great to Gone* (p. 215), which is first-hand but not contemporaneous. Searches turned up no 1988–89 source: Internet Archive full-text, web search, and a 2013 Richmond Fed *Econ Focus* article, which covers the Best Buy rivalry but not the offer. LoC newspapers stop at 1963. The offer stays in the dossier as "reportedly", with an Open Question.

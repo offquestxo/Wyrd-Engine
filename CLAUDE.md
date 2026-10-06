@@ -64,11 +64,11 @@ You are building and maintaining the wyrd.exe story engine: a local app that fin
 - Notion connector authorized in the owner's Claude account — for Phase 7 database setup only; the
   app's sync uses NOTION_TOKEN/NOTION_DATABASE_ID (docs/decisions.md).
 - Phase 1 (UI shell): **done**. All pages plus Settings (real data), command palette, live panel over
-  SSE, PWA. Chat/Stories/Research/Outliers use sample data (`apps/web/lib/mock.ts`).
+  SSE, PWA. (Sample data was replaced phase by phase; none is left since Phase 6.)
 - Phase 2 (jobs, runs, dashboard): **done**, reviewed. Plans → approved runs (`plans.py`),
   DB-backed runner with cancellation (`jobs.py`), live logs over SSE, run detail, real quota meters
   (`/api/usage`), `@demo` test agent. Home, run detail, and live panel use real data.
-- Phase 3 (@scout): **done**, awaiting review. News + evergreen gap finder (`agents/scout.py`), dedup
+- Phase 3 (@scout): **done**, reviewed and pushed. News + evergreen gap finder (`agents/scout.py`), dedup
   (`agents/dedup.py`), stories repository + API (`stories.py`), real Stories page (table/board/drawer),
   Run @scout form → plan card with YouTube estimate. Verified live (news: 10 stories; gap finder:
   20 search calls / 40 units). Mistral account has 0 req/min quota → blocked until the owner fixes it.
@@ -80,9 +80,9 @@ You are building and maintaining the wyrd.exe story engine: a local app that fin
   token-guarded), `claude -p` stream-json turns with one resumed session per chat and an MCP-only
   allowlist, @mention fast path (no Claude), plan + result cards, results fed back to the orchestrator,
   hybrid memory search, Claude meter with soft cap. Browser calls the API through Next's `/api` proxy.
-- Phase 6 (@researcher): **done**, awaiting review (not pushed). Headless Claude researcher
-  (`agents/researcher.py`, `.claude/agents/researcher.md`) with per-depth turn budgets, researcher MCP
-  tools at `/mcp-research` (source_* per module, extract_from_document, second_opinion, save_dossier),
-  structured dossiers with excerpt/figure/prose-number checks, export to research/<slug>/, real Research
-  page. Live: Circuit City standard dossier, 31/32 claims verified, 34/40 Claude turns.
-- Next: Phase 7 (Notion sync) after "proceed".
+- Phase 6 (@researcher): **done**, reviewed and pushed. Headless Claude researcher (`agents/researcher.py`,
+  `.claude/agents/researcher.md`) with per-depth turn budgets, researcher MCP tools at `/mcp-research`
+  (source_* per module, extract_from_document, second_opinion, save_dossier), structured dossiers with
+  excerpt, figure, claim-support (Groq 120B → NVIDIA), prose-number and duration checks; interpretation flags
+  must be resolved before saving. Circuit City dossier v2: 41/41 claims verified (v1 in history).
+- Phase 7 (Notion sync): **in progress** (docs/phase7-progress.md).
