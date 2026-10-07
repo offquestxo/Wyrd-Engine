@@ -44,6 +44,7 @@ from apps.api.providers.schemas import (
     SecondOpinion,
     SupportBatch,
     SupportItem,
+    SupportResult,
     SupportVerdict,
     VideoForAnalysis,
 )
@@ -57,6 +58,8 @@ log = logging.getLogger("wyrd.router")
 
 # True while a call runs on a fallback provider (not the route's first usable one).
 _on_fallback: ContextVar[bool] = ContextVar("_on_fallback", default=False)
+# When set, _run appends "provider/model" for every successful call (who actually served it).
+_served_by: ContextVar[list[str] | None] = ContextVar("_served_by", default=None)
 
 # Token estimates used for batching/chunking (see estimate_tokens).
 SCORE_OUTPUT_TOKENS_PER_ITEM = 120
@@ -350,6 +353,9 @@ class Router:
                         step.provider,
                         f"succeeded after {', '.join(s.provider for s in steps[:index])} failed",
                     )
+                served = _served_by.get()
+                if served is not None:
+                    served.append(f"{step.provider}/{model.id}")
                 return result
         self._event(task, "failed", "router", "; ".join(errors) or "no providers configured")
         raise AllProvidersFailed(task, errors, block=bool(blocks) and all(blocks))
@@ -537,25 +543,55 @@ class Router:
         batch = await self._json_task("analyze_outliers", "outlier_analysis", payload, OutlierBatch)
         return batch.analyses
 
-    async def check_support(self, items: Sequence[SupportItem]) -> list[SupportVerdict]:
+    def primary_step(self, task: str) -> RouteStep | None:
+        steps = self.config.tasks.get(task) or []
+        return steps[0] if steps else None
+
+    async def check_support(
+        self, items: Sequence[SupportItem], primary_only: bool = False
+    ) -> SupportResult:
         """Per claim: does its excerpt support every factual part? Batched to the route's
-        request budget; a claim with no verdict back is treated as unchecked (not supported)."""
+        request budget. The result says which providers served it: anything other than the
+        configured primary (Groq) counts as a fallback, including when the router moved a
+        near-limit Groq to the back of the route. `primary_only` pins the primary (no
+        fallback), for "Re-check with Groq"."""
+        primary = self.primary_step("check_support")
+        route = [primary] if primary_only and primary is not None else None
         budget = self.request_budget("check_support") or 6000
         verdicts: list[SupportVerdict] = []
         batch: list[SupportItem] = []
         used = 1500  # prompt overhead
-        for item in [*items, None]:
-            size = estimate_tokens(item.model_dump_json()) + 80 if item else 0
-            if batch and (item is None or used + size > budget):
-                out = await self._json_task(
-                    "check_support", "claim_support", [b.model_dump() for b in batch], SupportBatch
-                )
-                verdicts += out.verdicts
-                batch, used = [], 1500
-            if item is not None:
-                batch.append(item)
-                used += size
-        return verdicts
+        served: list[str] = []
+        token = _served_by.set(served)
+        try:
+            for item in [*items, None]:
+                size = estimate_tokens(item.model_dump_json()) + 80 if item else 0
+                if batch and (item is None or used + size > budget):
+                    out = await self._json_task(
+                        "check_support",
+                        "claim_support",
+                        [b.model_dump() for b in batch],
+                        SupportBatch,
+                        route=route,
+                    )
+                    verdicts += out.verdicts
+                    batch, used = [], 1500
+                if item is not None:
+                    batch.append(item)
+                    used += size
+        finally:
+            _served_by.reset(token)
+        primary_label = (
+            f"{primary.provider}/{self.config.model(primary.provider, primary.model).id}"
+            if primary
+            else None
+        )
+        return SupportResult(
+            verdicts=verdicts,
+            served_by=sorted(set(served)),
+            primary=primary_label,
+            fallback=any(s != primary_label for s in served),
+        )
 
     async def second_opinion(self, dossier_markdown: str) -> SecondOpinion:
         return await self._json_task(

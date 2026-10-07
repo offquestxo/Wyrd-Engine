@@ -111,6 +111,15 @@ class SupportBatch(BaseModel):
     verdicts: list[SupportVerdict]
 
 
+class SupportResult(BaseModel):
+    """What the router's check_support returns (not an LLM schema)."""
+
+    verdicts: list[SupportVerdict]
+    served_by: list[str] = Field(default_factory=list)  # "provider/model" that answered
+    primary: str | None = None  # the configured primary ("groq/openai/gpt-oss-120b")
+    fallback: bool = False  # any batch answered by something other than the primary
+
+
 # --- second_opinion --------------------------------------------------------
 class ClaimFlag(BaseModel):
     claim: str

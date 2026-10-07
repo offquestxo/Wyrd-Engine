@@ -438,3 +438,16 @@ Results: 41/41 claims pass the excerpt check, the support check (Groq 120B) make
 **No token:** the service reports `configured: false`, Sync now returns 409, and the auto-sync watcher does nothing. Nothing else depends on Notion; a test runs the API with no Notion settings.
 
 **Also fixed:** the Research page's live refresh listened for `dossier.saved`, but that event wasn't in the SSE listener list, so it never fired.
+
+**Live acceptance (2026-10-07):**
+- **First Sync now:** created all 25 stories in "wyrd.exe Stories" in 28 requests over 11.9 s (paced). The connector confirmed every row: hooks prefixed `UNVERIFIED LEAD:`, Scores, "N sources (P primary)", Notes and Engine ID.
+- **Notion → app:** in Notion (via the connector), story #20 (FTX) Status went Inbox → Shortlisted and story #25 (Circuit City) got a new Note. The next sync pulled both (1 request, schema check cached), and the app showed the new Status and Notes. Neither was pushed back.
+- **App → Notion:** reverting both in the app then syncing updated 2 pages (recorded as local-won conflicts, correctly), and Notion showed the original values again.
+
+## Fallback support checks (2026-10-07)
+
+The claim-support checker's fallback (NVIDIA) is more lenient than Groq.
+- `Router.check_support` now returns a `SupportResult` with `served_by` (provider/model of every batch), `primary` (the route's first configured step) and `fallback`. Anything other than the primary counts as a fallback. That includes NVIDIA answering first because the router moved a near-limit Groq to the back of the route; the router's own "fallback" flag misses that case.
+- A dossier checked by a fallback records `checks.support_checked_by`. Its markdown header says the check "ran on a fallback model …; re-check with Groq". The Research page shows a **checked by fallback** badge and a **Re-check with Groq** button.
+- `POST /api/dossiers/{story_id}/recheck` re-runs every check on the latest version with Groq pinned (`primary_only`, no fallback) and saves the result as a new version, carrying the second-opinion review over with `recheck_of_version`.
+- If Groq can't run (rate limit or outage), it returns 503 and saves nothing.

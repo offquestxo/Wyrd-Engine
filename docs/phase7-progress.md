@@ -22,5 +22,7 @@ Resume note in case a session hits the usage limit.
 - [x] notion_sync.py + config + endpoints + tests (fake API via httpx.MockTransport) (261c9ee)
 - [x] Settings UI (Notion card) (ecb11eb)
 - [x] DB created via connector: "wyrd.exe Stories" (18b09686f09640aeb42a07a7aed75d26); NOTION_DATABASE_ID set in .env
-- [ ] Owner: add NOTION_TOKEN, add the integration to the database (••• → Connections), Reload .env
-- [ ] Live: push stories, change Status in Notion, sync back
+- [x] Owner added NOTION_TOKEN and connected the integration
+- [x] Live: 25 stories pushed; Status + Notes edited in Notion came back; app edits pushed (decisions.md)
+- [x] Fallback support checks flagged + Re-check with Groq
+- [x] Pushed

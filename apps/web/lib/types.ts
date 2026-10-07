@@ -356,6 +356,8 @@ export interface DossierSummary {
   run_id: number | null
   excerpt_check: { passed: number; failed: number }
   flags: number
+  support_fallback: boolean
+  support_checked_by: string[]
   source_count: number
   primary_count: number
 }

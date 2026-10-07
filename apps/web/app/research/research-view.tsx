@@ -7,10 +7,14 @@ import {
   ExternalLinkIcon,
   FileTextIcon,
   FlagIcon,
+  Loader2Icon,
+  RefreshCwIcon,
   ShieldCheckIcon,
+  TriangleAlertIcon,
 } from "lucide-react"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { useState } from "react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { toast } from "sonner"
@@ -60,6 +64,23 @@ export function ResearchView() {
       toast.error("Clipboard unavailable in this browser context.")
     }
   }
+  const [rechecking, setRechecking] = useState(false)
+  const recheck = async () => {
+    if (!dossier) return
+    setRechecking(true)
+    try {
+      const res = await api<{ version: number; excerpt_check: { passed: number; failed: number; support_check: string } }>(
+        `/api/dossiers/${dossier.story_id}/recheck`,
+        { method: "POST" },
+      )
+      toast.success(`Re-checked with Groq: saved v${res.version}`, { description: res.excerpt_check.support_check })
+      select(dossier.story_id)
+    } catch (e) {
+      toast.error((e as Error).message)
+    } finally {
+      setRechecking(false)
+    }
+  }
   const openFile = async () => {
     if (!dossier) return
     try {
@@ -95,6 +116,7 @@ export function ResearchView() {
                 <p className="font-mono text-[11px] text-muted-foreground">
                   v{d.version} · {timeAgo(d.created_at)} · {d.excerpt_check.passed} verified
                   {d.flags > 0 && <span className="text-warning"> · {d.flags} flags</span>}
+                  {d.support_fallback && <span className="text-warning"> · fallback check</span>}
                 </p>
               </button>
             ))
@@ -169,6 +191,20 @@ export function ResearchView() {
                   <Badge variant="outline" className="gap-1 border-warning/40 text-warning">
                     <FlagIcon className="size-3" /> {dossier.flags} second-opinion flags
                   </Badge>
+                )}
+                {dossier.support_fallback && (
+                  <Badge
+                    variant="outline"
+                    className="gap-1 border-warning/40 text-warning"
+                    title={`Claim-support check ran on ${dossier.support_checked_by.join(", ")}, which is more lenient than Groq.`}
+                  >
+                    <TriangleAlertIcon className="size-3" /> checked by fallback
+                  </Badge>
+                )}
+                {dossier.support_fallback && (
+                  <Button size="sm" variant="outline" disabled={rechecking} onClick={() => void recheck()}>
+                    {rechecking ? <Loader2Icon className="animate-spin" /> : <RefreshCwIcon />} Re-check with Groq
+                  </Button>
                 )}
                 <div className="flex w-full gap-2 sm:ml-auto sm:w-auto">
                   <Button size="sm" variant="outline" onClick={copy}>
