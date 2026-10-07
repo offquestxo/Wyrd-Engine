@@ -31,6 +31,7 @@ from apps.api.plans import PlanError, PlanIn, PlanService
 from apps.api.providers.base import ConnectionTest
 from apps.api.providers.router import gemini_uses_oauth, get_router
 from apps.api.research import dossier as dossier_mod
+from apps.api.research.texts import fetch_text
 from apps.api.settings import get_settings, mask_secret
 from apps.api.settings_store import auto_approve_key, get_setting, set_setting
 from apps.api.sources import youtube
@@ -432,6 +433,33 @@ async def get_dossier_endpoint(story_id: int, version: int | None = None) -> dic
     if dossier is None:
         raise HTTPException(404, f"no dossier for story {story_id}")
     return dossier
+
+
+@app.post("/api/dossiers/{story_id}/recheck")
+async def recheck_dossier(story_id: int) -> dict[str, Any]:
+    """Re-run the claim-support check with Groq only (no fallback); saves a new version."""
+    cache: dict[str, str] = {}
+
+    async def lookup(url: str) -> str:
+        if url not in cache:
+            cache[url] = await fetch_text(url)
+        return cache[url]
+
+    router = get_router()
+    try:
+        result = await dossier_mod.recheck_with_primary(
+            get_engine(),
+            story_id,
+            lambda items: router.check_support(items, primary_only=True),
+            lookup,
+        )
+    except LookupError as e:
+        raise HTTPException(404, str(e)) from e
+    except dossier_mod.RecheckUnavailable as e:
+        raise HTTPException(503, str(e)) from e
+    bus.publish("dossier.saved", story_id=story_id, version=result["version"])
+    bus.publish("story.changed", story_id=story_id)
+    return result
 
 
 @app.post("/api/dossiers/{story_id}/open")

@@ -454,9 +454,36 @@ async def test_check_support_falls_back_and_returns_verdicts(engine: Any) -> Non
             id="1", claim="Fired 3,400 workers to save money", excerpt="laid off approximately 3400"
         ),
     ]
-    verdicts = await router.check_support(items)
+    result = await router.check_support(items)
+    verdicts = result.verdicts
     assert [v.supported for v in verdicts] == [True, False]
+    assert result.fallback is True and result.served_by == ["nvidia/nvidia-model"]
     assert verdicts[1].trimmed_claim == "Fired 3,400 workers"
     assert (
         "excerpt" in nvidia.calls[0]["user"] and "every factual part" in nvidia.calls[0]["system"]
     )
+
+
+async def test_check_support_near_limit_groq_counts_as_fallback(engine: Any) -> None:
+    """The router moves a near-limit Groq to the back, so NVIDIA answers first; that's still a
+    fallback for the support check. primary_only pins Groq."""
+    from apps.api.providers.schemas import SupportItem
+
+    config = make_config()
+    config.tasks["check_support"] = [
+        RouteStep(provider="groq", model="fast"),
+        RouteStep(provider="nvidia", model="chat"),
+    ]
+    usage = UsageLog(engine)
+    for _ in range(28):  # 28/30 rpm ≥ near_limit_ratio
+        usage.record(provider="groq", model="groq-model", task="x", ok=True)
+    reply = json.dumps({"verdicts": [{"id": "0", "supported": True}]})
+    groq = FakeProvider("groq", [reply])
+    nvidia = FakeProvider("nvidia", [reply])
+    router = Router(config, {"groq": groq, "nvidia": nvidia}, UsageLog(engine))  # type: ignore[arg-type]
+    items = [SupportItem(id="0", claim="c", excerpt="e")]
+    lenient = await router.check_support(items)
+    assert lenient.served_by == ["nvidia/nvidia-model"] and lenient.fallback is True
+    assert lenient.primary == "groq/groq-model" and groq.calls == []
+    strict = await router.check_support(items, primary_only=True)
+    assert strict.served_by == ["groq/groq-model"] and strict.fallback is False

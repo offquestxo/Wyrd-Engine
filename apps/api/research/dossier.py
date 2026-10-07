@@ -33,7 +33,7 @@ from sqlmodel import Session, col, func, select
 from apps.api.config import load_scoring
 from apps.api.db.models import Dossier, Story, StorySource, utcnow
 from apps.api.providers.base import ProviderError
-from apps.api.providers.schemas import SupportItem, SupportVerdict
+from apps.api.providers.schemas import SupportItem, SupportResult
 from apps.api.research.texts import cap_words, excerpt_in
 from apps.api.settings import RESEARCH_DIR
 from apps.api.sources._http import SourceError
@@ -361,10 +361,11 @@ class RowCheck(BaseModel):
     ok: bool
     reason: str | None = None
     truncated: bool = False
+    meta: dict[str, Any] | None = None  # support_check: who served it (fallback?)
 
 
 META_SECTIONS = {"prose_numbers", "support_check"}  # not claim rows; counted separately
-SupportFn = Callable[[list[SupportItem]], Awaitable[list[SupportVerdict]]]
+SupportFn = Callable[[list[SupportItem]], Awaitable[SupportResult]]
 
 
 async def check_rows(
@@ -478,8 +479,12 @@ async def check_rows(
             person.source, person.excerpt = None, None
             person.role = f"{person.role} (unverified)"
 
-    support_status = await support_pass(out, passed, support, moved)
-    checks.append(RowCheck(section="support_check", claim=support_status, source=None, ok=True))
+    support_status, support_meta = await support_pass(out, passed, support, moved)
+    checks.append(
+        RowCheck(
+            section="support_check", claim=support_status, source=None, ok=True, meta=support_meta
+        )
+    )
 
     # Specific numbers in the prose sections must come from a cited source too. They stay in
     # the prose (rewriting it is the researcher's job) but are listed as unverified.
@@ -574,14 +579,15 @@ async def support_pass(
     passed: list[tuple[str, Any, RowCheck]],
     support: SupportFn | None,
     moved: list[str],
-) -> str:
+) -> tuple[str, dict[str, Any] | None]:
     """Claim-vs-excerpt support: a quote that exists can still be stretched by its claim.
     Unsupported details are trimmed (when what's left still stands) or the row moves to Open
-    Questions. Returns a one-line status for the check summary."""
+    Questions. Returns a one-line status for the check summary, and who served the check
+    (`fallback` is true when anything other than the primary checker answered)."""
     if not passed:
-        return "nothing to check"
+        return "nothing to check", None
     if support is None:
-        return "skipped (no checker configured)"
+        return "skipped (no checker configured)", None
     items = [
         SupportItem(
             id=str(i),
@@ -591,9 +597,11 @@ async def support_pass(
         for i, (kind, row, _) in enumerate(passed)
     ]
     try:
-        verdicts = {v.id: v for v in await support(items)}
+        result = await support(items)
     except ProviderError as e:
-        return f"unavailable ({e}); rows kept on the excerpt check alone"
+        return f"unavailable ({e}); rows kept on the excerpt check alone", None
+    verdicts = {v.id: v for v in result.verdicts}
+    meta = {"served_by": result.served_by, "primary": result.primary, "fallback": result.fallback}
     trimmed = removed = unchecked = 0
     drop: set[int] = set()
     for i, (kind, row, check) in enumerate(passed):
@@ -623,7 +631,11 @@ async def support_pass(
     out.timeline = [t for t in out.timeline if id(t) not in drop]
     out.key_numbers = [k for k in out.key_numbers if id(k) not in drop]
     status = f"{len(passed)} checked: {trimmed} trimmed, {removed} moved"
-    return status + (f", {unchecked} without a verdict (kept)" if unchecked else "")
+    if unchecked:
+        status += f", {unchecked} without a verdict (kept)"
+    if result.fallback:
+        status += f" (checked by fallback: {', '.join(result.served_by)})"
+    return status, meta
 
 
 # ---------------------------------------------------------------------------- rendering
@@ -644,6 +656,13 @@ def render_markdown(
     passed = sum(1 for c in rows if c.ok)
     prose = sum(1 for c in checks if c.section == "prose_numbers")
     note = f" {prose} number(s) in the prose weren't found in any cited source." if prose else ""
+    support = next((c for c in checks if c.section == "support_check"), None)
+    if support and support.meta and support.meta.get("fallback"):
+        note += (
+            " The claim-support check ran on a fallback model ("
+            + ", ".join(support.meta.get("served_by", []))
+            + "), which is more lenient; re-check with Groq."
+        )
     lines = [
         f"# {d.title} — Research Dossier",
         "",
@@ -773,6 +792,9 @@ async def save_dossier(
         "failed": len(rows) - passed,
         "prose_numbers_unverified": sum(1 for c in checks if c.section == "prose_numbers"),
         "support_check": next((c.claim for c in checks if c.section == "support_check"), "not run"),
+        "support_checked_by": next(
+            (c.meta for c in checks if c.section == "support_check" and c.meta), None
+        ),
         "truncated": sum(1 for c in checks if c.truncated),
         "rows": [c.model_dump() for c in checks],
         "fetch_errors": fetch_errors,
@@ -835,6 +857,7 @@ async def save_dossier(
                 "truncated",
                 "prose_numbers_unverified",
                 "support_check",
+                "support_checked_by",
             )
         },
         "moved_to_open_questions": [
@@ -876,6 +899,8 @@ def _summary(d: Dossier, story: Story | None, versions: list[int]) -> dict[str, 
         "run_id": d.run_id,
         "excerpt_check": {"passed": checks.get("passed", 0), "failed": checks.get("failed", 0)},
         "flags": len(flags),
+        "support_fallback": bool((checks.get("support_checked_by") or {}).get("fallback")),
+        "support_checked_by": (checks.get("support_checked_by") or {}).get("served_by", []),
         "source_count": len(d.sources_json or []),
         "primary_count": sum(1 for x in d.sources_json or [] if x.get("source_type") == "primary"),
     }
@@ -898,3 +923,48 @@ def get_dossier(engine: Engine, story_id: int, version: int | None = None) -> di
             "checks": d.checks,
             "export_path": d.export_path,
         }
+
+
+class RecheckUnavailable(RuntimeError):
+    """The primary support checker (Groq) couldn't run; nothing was saved."""
+
+
+async def recheck_with_primary(
+    engine: Engine,
+    story_id: int,
+    support: Callable[[list[SupportItem]], Awaitable[SupportResult]],
+    lookup: TextLookup,
+    research_dir: Path | None = None,
+) -> dict[str, Any]:
+    """Re-run every check on the latest version with the primary support checker pinned
+    (no fallback) and save the outcome as a new version. Used when a dossier was checked by a
+    more lenient fallback model."""
+    with Session(engine) as s:
+        latest = s.exec(
+            select(Dossier)
+            .where(Dossier.story_id == story_id)
+            .order_by(col(Dossier.version).desc())
+        ).first()
+        if latest is None or not latest.data:
+            raise LookupError(f"no structured dossier for story {story_id}")
+        data = DossierIn.model_validate(latest.data)
+        review = dict(latest.second_opinion or {})
+
+    async def primary_only(items: list[SupportItem]) -> SupportResult:
+        try:
+            return await support(items)
+        except ProviderError as e:
+            raise RecheckUnavailable(
+                f"Groq couldn't run the check ({e}). Nothing was changed; try again in a minute."
+            ) from e
+
+    review["recheck_of_version"] = latest.version
+    return await save_dossier(
+        engine,
+        story_id,
+        data,
+        lookup,
+        second_opinion=review,
+        research_dir=research_dir,
+        support=primary_only,
+    )

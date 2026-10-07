@@ -178,6 +178,7 @@ async def test_save_moves_failed_rows_and_exports(engine: Any, tmp_path: Path) -
         "truncated": 0,
         "prose_numbers_unverified": 0,
         "support_check": "skipped (no checker configured)",
+        "support_checked_by": None,
     }
     assert result["primary_sources"] == 1
 
@@ -259,11 +260,11 @@ async def test_prose_numbers_must_come_from_a_cited_source(engine: Any, tmp_path
 
 
 async def test_support_check_trims_or_moves_overstated_claims(engine: Any, tmp_path: Path) -> None:
-    from apps.api.providers.schemas import SupportItem, SupportVerdict
+    from apps.api.providers.schemas import SupportItem, SupportResult, SupportVerdict
 
     seen: list[SupportItem] = []
 
-    async def support(items: list[SupportItem]) -> list[SupportVerdict]:
+    async def support(items: list[SupportItem]) -> SupportResult:
         seen.extend(items)
         out = []
         for item in items:
@@ -282,7 +283,7 @@ async def test_support_check_trims_or_moves_overstated_claims(engine: Any, tmp_p
                 )
             else:
                 out.append(SupportVerdict(id=item.id, supported=True))
-        return out
+        return SupportResult(verdicts=out, served_by=["groq/gpt"], primary="groq/gpt")
 
     d = make_dossier()
     d.timeline[0].event = "Files for Chapter 11 after the board lost faith"
@@ -407,9 +408,10 @@ class ToolRouter:
         )
 
     async def check_support(self, items: list[Any]) -> list[Any]:
-        from apps.api.providers.schemas import SupportVerdict
+        from apps.api.providers.schemas import SupportResult, SupportVerdict
 
-        return [SupportVerdict(id=i.id, supported=True) for i in items]
+        verdicts = [SupportVerdict(id=i.id, supported=True) for i in items]
+        return SupportResult(verdicts=verdicts, served_by=["groq/gpt"], primary="groq/gpt")
 
     async def second_opinion(self, markdown: str) -> SecondOpinion:
         return SecondOpinion(
@@ -560,6 +562,7 @@ async def test_save_requires_second_opinion_then_reports_checks(research_env: An
         "truncated": 0,
         "prose_numbers_unverified": 0,
         "support_check": "4 checked: 0 trimmed, 0 moved",
+        "support_checked_by": {"served_by": ["groq/gpt"], "primary": "groq/gpt", "fallback": False},
     }
     assert (research_env["tmp"] / "research" / "circuit-city" / "dossier.md").exists()
     with Session(research_env_engine(research_env)) as s:
@@ -748,3 +751,69 @@ async def test_unreadable_links_fail_fast_with_a_note(research_env: Any) -> None
             )
     assert research_env["router"].extract_calls == []  # no provider call spent
     assert any("Google News" in n for n in research_env["session"].source_notes)
+
+
+# ---------------------------------------------------------------------------- fallback checker
+def support_by(provider: str, verdict: bool = True) -> Any:
+    from apps.api.providers.schemas import SupportItem, SupportResult, SupportVerdict
+
+    async def support(items: list[SupportItem]) -> SupportResult:
+        return SupportResult(
+            verdicts=[SupportVerdict(id=i.id, supported=verdict) for i in items],
+            served_by=[provider],
+            primary="groq/openai/gpt-oss-120b",
+            fallback=provider != "groq/openai/gpt-oss-120b",
+        )
+
+    return support
+
+
+async def test_fallback_support_check_is_flagged(engine: Any, tmp_path: Path) -> None:
+    nvidia = "nvidia/nvidia/nemotron-3-super-120b-a12b"
+    result = await dmod.save_dossier(
+        engine, 1, make_dossier(), lookup, research_dir=tmp_path, support=support_by(nvidia)
+    )
+    by = result["excerpt_check"]["support_checked_by"]
+    assert by == {"served_by": [nvidia], "primary": "groq/openai/gpt-oss-120b", "fallback": True}
+    assert "checked by fallback" in result["excerpt_check"]["support_check"]
+    md = (tmp_path / "circuit-city" / "dossier.md").read_text()
+    assert "ran on a fallback model (" + nvidia + ")" in md and "re-check with Groq" in md
+    listed = dmod.list_dossiers(engine)[0]
+    assert listed["support_fallback"] is True and listed["support_checked_by"] == [nvidia]
+
+
+async def test_recheck_with_groq_saves_a_new_unflagged_version(engine: Any, tmp_path: Path) -> None:
+    nvidia = "nvidia/nvidia/nemotron-3-super-120b-a12b"
+    await dmod.save_dossier(
+        engine,
+        1,
+        make_dossier(),
+        lookup,
+        research_dir=tmp_path,
+        support=support_by(nvidia),
+        second_opinion={"flags": [{"claim": "x"}], "resolutions": []},
+    )
+    again = await dmod.recheck_with_primary(
+        engine, 1, support_by("groq/openai/gpt-oss-120b"), lookup, research_dir=tmp_path
+    )
+    assert again["version"] == 2
+    assert again["excerpt_check"]["support_checked_by"]["fallback"] is False
+    latest = dmod.get_dossier(engine, 1)
+    assert latest and latest["version"] == 2 and latest["second_opinion"]["recheck_of_version"] == 1
+    assert latest["second_opinion"]["flags"] == [{"claim": "x"}]  # review carried over
+    assert dmod.list_dossiers(engine)[0]["support_fallback"] is False
+
+
+async def test_recheck_without_groq_changes_nothing(engine: Any, tmp_path: Path) -> None:
+    from apps.api.providers.base import ProviderError
+
+    await dmod.save_dossier(
+        engine, 1, make_dossier(), lookup, research_dir=tmp_path, support=support_by("nvidia/x")
+    )
+
+    async def groq_down(items: list[Any]) -> Any:
+        raise ProviderError("groq", "HTTP 429 rate limited", status=429)
+
+    with pytest.raises(dmod.RecheckUnavailable, match="Nothing was changed"):
+        await dmod.recheck_with_primary(engine, 1, groq_down, lookup, research_dir=tmp_path)
+    assert dmod.list_dossiers(engine)[0]["versions"] == [1]
