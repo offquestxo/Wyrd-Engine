@@ -884,6 +884,13 @@ def list_dossiers(engine: Engine) -> list[dict[str, Any]]:
         return out
 
 
+def unresolved_flags(review: dict[str, Any] | None) -> int:
+    """Medium/high second-opinion flags not matched by a recorded resolution."""
+    review = review or {}
+    serious = [f for f in review.get("flags") or [] if f.get("severity") in ("medium", "high")]
+    return max(0, len(serious) - len(review.get("resolutions") or []))
+
+
 def _summary(d: Dossier, story: Story | None, versions: list[int]) -> dict[str, Any]:
     checks = d.checks or {}
     flags = (d.second_opinion or {}).get("flags") or []
@@ -899,6 +906,7 @@ def _summary(d: Dossier, story: Story | None, versions: list[int]) -> dict[str, 
         "run_id": d.run_id,
         "excerpt_check": {"passed": checks.get("passed", 0), "failed": checks.get("failed", 0)},
         "flags": len(flags),
+        "unresolved_flags": unresolved_flags(d.second_opinion),
         "support_fallback": bool((checks.get("support_checked_by") or {}).get("fallback")),
         "support_checked_by": (checks.get("support_checked_by") or {}).get("served_by", []),
         "source_count": len(d.sources_json or []),
@@ -958,12 +966,19 @@ async def rerun_second_opinion(
             select(Dossier).where(Dossier.story_id == story_id, Dossier.version == version)
         ).one()
         old = dict(row.second_opinion or {})
+        # Earlier resolutions answered the earlier review, not these flags: keep them under
+        # `previous` so the new flags count as unresolved until a new version resolves them.
         row.second_opinion = old | {
             "flags": [f.model_dump() for f in review.flags],
             "overall": review.overall,
             "at": utcnow().isoformat(),
             "rerun": True,
-            "previous": {"flags": old.get("flags", []), "overall": old.get("overall")},
+            "resolutions": [],
+            "previous": {
+                "flags": old.get("flags", []),
+                "overall": old.get("overall"),
+                "resolutions": old.get("resolutions", []),
+            },
         }
         s.add(row)
         s.commit()

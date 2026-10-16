@@ -365,6 +365,8 @@ export interface DossierSummary {
   run_id: number | null
   excerpt_check: { passed: number; failed: number }
   flags: number
+  /** Medium/high second-opinion flags without a recorded resolution. */
+  unresolved_flags: number
   support_fallback: boolean
   support_checked_by: string[]
   source_count: number

@@ -850,7 +850,8 @@ async def test_rerun_second_opinion_updates_the_same_version(engine: Any, tmp_pa
     so = out["second_opinion"]
     assert so["overall"] == "mostly fine" and so["rerun"] is True
     assert so["previous"]["overall"] == "unavailable: timeout"
-    assert so["resolutions"] == [{"a": 1}]  # earlier resolutions kept
+    assert so["resolutions"] == [] and so["previous"]["resolutions"] == [{"a": 1}]
+    assert out["unresolved_flags"] == 0  # the new flag is low severity
 
 
 async def test_rerun_second_opinion_unavailable_changes_nothing(
@@ -874,3 +875,11 @@ async def test_rerun_second_opinion_unavailable_changes_nothing(
     with pytest.raises(dmod.SecondOpinionUnavailable, match="Nothing was changed"):
         await dmod.rerun_second_opinion(engine, 1, down)
     assert dmod.get_dossier(engine, 1)["second_opinion"]["overall"] == "unavailable: timeout"  # type: ignore[index]
+
+
+def test_unresolved_flags_counts_medium_and_high_only() -> None:
+    flags = [{"severity": s} for s in ("low", "medium", "high", "high")]
+    assert dmod.unresolved_flags({"flags": flags}) == 3
+    assert dmod.unresolved_flags({"flags": flags, "resolutions": [{}, {}]}) == 1
+    assert dmod.unresolved_flags({"flags": flags, "resolutions": [{}] * 5}) == 0
+    assert dmod.unresolved_flags(None) == 0

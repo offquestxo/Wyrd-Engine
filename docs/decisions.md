@@ -532,3 +532,20 @@ The stored login stopped working on the Claude side (expired or revoked, and the
   - Nemotron answered a live extraction in 11 s with valid JSON. It's the same model family as the NVIDIA fallback, but reached through OpenRouter with its own quota.
   - Two aliases can now share a model ID; the usage meter counts that model once.
 - **Gemini OAuth expiry:** Google expires refresh tokens after 7 days only for apps in **Testing**. Publishing ("In production") removes that limit. Our scopes are sensitive, so without verification Google shows an "unverified app" warning (under the 100-user cap), which is fine for a personal tool. Steps are in the demo-prep report.
+
+## Bre-X v2 and the "unresolved flags" badge (2026-10-16)
+
+- **Correction:** the NVIDIA re-run had **16** medium/high flags, not the 20 reported earlier; the other 2 counted were low-severity interpretation flags.
+- **v2** resolves all of them, with 20 recorded resolutions, and keeps v1 in history.
+  - **Attributed:** "the largest fraud in Canadian mining history" (Wikipedia's Walsh biography) replaces "largest mining fraud in history". De Guzman "is widely considered to be the mastermind" (Wikipedia). "Several stock analysts still insisted" it was the world's biggest deposit.
+  - **Fixed from the sources:**
+    - Suharto "suggested" sharing the site; Bob Hasan negotiated the Freeport deal (announced Feb 17, 1997).
+    - Strathcona Minerals reported the salting on May 4, 1997, and shares fell to 6 cents on May 7.
+    - Walsh **moved** to the Bahamas in April 1996, before the collapse, so "fled" was wrong. He declared personal bankruptcy in early 1993, which replaces "broke".
+  - **"River dust and a syringe":** in no source, so cut. Replaced with the sourced "$61,000 of panned gold bought from locals".
+  - **Moved to Open Questions:** whether Bre-X prompted National Instrument 43-101 (its 2001 date and purpose are sourced), and "biggest mining fraud worldwide".
+  - Every new fact has its own sourced row: 5 timeline events and 3 key numbers.
+- **v2 checks:** 29/29 excerpts verified, 0 unverified prose numbers, claim-support check on Groq (2 literal trims went to Open Questions).
+- **Badge:** `unresolved_flags` = medium/high second-opinion flags minus recorded resolutions. It shows as "N unresolved flags" on the Research page (list and header); the total flag count is shown separately, in grey.
+  - A second-opinion re-run moves earlier resolutions under `previous`: they answered a different review, so the new flags count until a new version resolves them.
+  - Bre-X v1: 16 unresolved; v2: 0.
