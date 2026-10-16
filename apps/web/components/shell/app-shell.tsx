@@ -3,7 +3,7 @@
 import { MenuIcon, PanelRightOpenIcon } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { type ReactNode, useEffect, useRef, useState } from "react"
+import { type ReactNode, useEffect, useRef, useState, useSyncExternalStore } from "react"
 
 import { CommandPalette } from "@/components/shell/command-palette"
 import { EngineBanner } from "@/components/shell/engine-banner"
@@ -14,6 +14,14 @@ import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet"
 import { useLocalState } from "@/hooks/use-local-state"
 import { NAV } from "@/lib/nav"
 
+const WIDE = "(min-width: 1280px)"
+
+function subscribeWide(callback: () => void) {
+  const mq = window.matchMedia(WIDE)
+  mq.addEventListener("change", callback)
+  return () => mq.removeEventListener("change", callback)
+}
+
 function isTyping(target: EventTarget | null): boolean {
   const el = target as HTMLElement | null
   return !!el && (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName))
@@ -23,7 +31,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   const router = useRouter()
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [navOpen, setNavOpen] = useState(false)
-  const [panelOpen, setPanelOpen] = useLocalState("wyrd.panelOpen", true)
+  // null = never toggled: open on wide screens, closed on phones/tablets (it overlays there).
+  const [panelPref, setPanelOpen] = useLocalState<boolean | null>("wyrd.panelOpen", null)
+  const wide = useSyncExternalStore(subscribeWide, () => window.matchMedia(WIDE).matches, () => true)
+  const panelOpen = panelPref ?? wide
+  const [collapsed, setCollapsed] = useLocalState("wyrd.sidebarCollapsed", false)
   const gPressedAt = useRef(0)
 
   useEffect(() => {
@@ -37,6 +49,11 @@ export function AppShell({ children }: { children: ReactNode }) {
       if (mod && e.key === ".") {
         e.preventDefault()
         setPanelOpen(!panelOpen)
+        return
+      }
+      if (mod && e.key === "\\") {
+        e.preventDefault()
+        setCollapsed(!collapsed)
         return
       }
       if (mod || e.altKey || isTyping(e.target)) return
@@ -53,16 +70,26 @@ export function AppShell({ children }: { children: ReactNode }) {
         gPressedAt.current = 0
       }
     }
+    const openPalette = () => setPaletteOpen(true)
     window.addEventListener("keydown", onKey)
-    return () => window.removeEventListener("keydown", onKey)
-  }, [router, panelOpen, setPanelOpen])
+    window.addEventListener("wyrd:open-palette", openPalette)
+    return () => {
+      window.removeEventListener("keydown", onKey)
+      window.removeEventListener("wyrd:open-palette", openPalette)
+    }
+  }, [router, panelOpen, setPanelOpen, collapsed, setCollapsed])
 
   return (
     <div className="flex h-dvh overflow-hidden">
-      <Sidebar className="hidden md:flex" onOpenPalette={() => setPaletteOpen(true)} />
+      <Sidebar
+        className="hidden md:flex"
+        collapsed={collapsed}
+        onToggleCollapsed={() => setCollapsed(!collapsed)}
+        onOpenPalette={() => setPaletteOpen(true)}
+      />
       {/* Phone/tablet: the sidebar slides in from a top bar. */}
       <Sheet open={navOpen} onOpenChange={setNavOpen}>
-        <SheetContent side="left" className="w-56 border-none p-0">
+        <SheetContent side="left" className="w-[232px] border-none p-0">
           <SheetTitle className="sr-only">Navigation</SheetTitle>
           <Sidebar
             className="w-full"
@@ -80,7 +107,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <MenuIcon />
           </Button>
           <Link href="/" className="font-mono text-sm font-semibold tracking-tight">
-            wyrd<span className="text-brand">.exe</span>
+            wyrd<span className="text-brand-soft">.exe</span>
           </Link>
           <Button
             variant="ghost"

@@ -1,10 +1,10 @@
 import { cn } from "@/lib/utils"
 
-export type AgentState = "running" | "idle" | "failed"
+export type AgentState = "running" | "idle" | "failed" | "ready"
 
-const LABEL: Record<AgentState, string> = { running: "running", idle: "idle", failed: "failed" }
+const LABEL: Record<AgentState, string> = { running: "running", idle: "idle", failed: "failed", ready: "ready" }
 
-/** Dot + label: running (cyan, glowing), idle (hollow), failed (red). */
+/** Dot + label: running (cyan, glowing), idle (hollow), failed (red), ready (green, e.g. a connected service). */
 export function AgentStatus({
   state,
   label,
@@ -24,6 +24,7 @@ export function AgentStatus({
           state === "running" && "animate-pulse bg-live shadow-[0_0_8px_var(--live)] motion-reduce:shadow-none",
           state === "idle" && "border border-subtle-foreground",
           state === "failed" && "bg-destructive",
+          state === "ready" && "bg-success",
         )}
       />
       <span
@@ -31,6 +32,7 @@ export function AgentStatus({
           state === "running" && "text-live-text",
           state === "idle" && "text-subtle-foreground",
           state === "failed" && "text-destructive-text",
+          state === "ready" && "text-success-text",
         )}
       >
         {label ?? LABEL[state]}

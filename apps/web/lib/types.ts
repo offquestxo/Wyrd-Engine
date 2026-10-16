@@ -95,6 +95,7 @@ export interface OutlierVideo {
   published_at: string | null
   analysis: OutlierAnalysisRecord | null
   story_id: number | null
+  scanned_at?: string | null
 }
 
 export interface ChannelRecord {

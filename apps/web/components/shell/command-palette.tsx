@@ -2,6 +2,8 @@
 
 import { PanelRightIcon, PlayIcon, RefreshCwIcon } from "lucide-react"
 import { useRouter } from "next/navigation"
+
+import { useStartAgent } from "@/components/shell/start-agent"
 import { toast } from "sonner"
 
 import {
@@ -18,7 +20,6 @@ import {
 import { api } from "@/lib/api"
 import useSWR from "swr"
 
-import { useProposePlan } from "@/components/plans/propose-provider"
 import { fetcher } from "@/lib/api"
 import type { Story } from "@/lib/types"
 import { AGENT_INFO, NAV } from "@/lib/nav"
@@ -33,7 +34,7 @@ export function CommandPalette({
   onTogglePanel: () => void
 }) {
   const router = useRouter()
-  const propose = useProposePlan()
+  const startAgent = useStartAgent()
   const { data: stories } = useSWR<Story[]>(open ? "/api/stories" : null, fetcher)
   const run = (fn: () => void) => {
     onOpenChange(false)
@@ -61,18 +62,10 @@ export function CommandPalette({
             <CommandItem
               key={agent.name}
               value={`run ${agent.name} ${agent.description}`}
-              onSelect={() =>
-                run(() =>
-                  agent.name === "scout"
-                    ? void propose("scout", { mode: "both", limit: 25 }, "Find up to 25 story leads (news + evergreen)")
-                    : agent.name === "outlier"
-                      ? void propose("outlier", {}, "Scan all competitor channels for outliers")
-                      : router.push(`/chat?compose=${encodeURIComponent(`@${agent.name} `)}`),
-                )
-              }
+              onSelect={() => run(() => startAgent(agent.name))}
             >
               <PlayIcon />
-              <span className="font-mono text-brand">@{agent.name}</span>
+              <span className="font-mono text-brand-soft">@{agent.name}</span>
               <span className="text-muted-foreground">{agent.description}</span>
             </CommandItem>
           ))}

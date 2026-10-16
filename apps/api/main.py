@@ -164,6 +164,9 @@ async def events(
     last_event_id: int | None = Header(default=None),
 ) -> AsyncIterator[ServerSentEvent]:
     """Live event stream (SSE). Reconnecting clients resume after Last-Event-ID."""
+    # Send a byte straight away so EventSource opens now, not at the first keep-alive ping
+    # (the UI showed "connecting" for ~15 s on every page load).
+    yield ServerSentEvent(comment="connected", retry=2000)
     async for event in bus.subscribe(after_id=last_event_id or 0):
         yield ServerSentEvent(
             id=str(event.id), event=event.type, data=event.model_dump(mode="json")

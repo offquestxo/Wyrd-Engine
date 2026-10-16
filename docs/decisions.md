@@ -575,3 +575,28 @@ The stored login stopped working on the Claude side (expired or revoked, and the
 - **Checked at 1440px and 375px:** no horizontal overflow.
   - Known shell issue, left for stage 2: the live panel defaults to open and covers the page on phones.
 - **Plan steps** no longer list disabled providers.
+
+## Redesign stage 2: shell and Home (2026-10-16)
+
+- **Sidebar** (`components/shell/sidebar.tsx`):
+  - Logo tile and "STORY ENGINE · v1".
+  - Nav counts: Stories (all stories), Research (dossiers).
+  - Outliers shows "N new": outliers scanned since you last opened /outliers, tracked in localStorage. Opening the page clears it.
+  - A violet dot on Chat while a plan waits for you.
+- **Agents section:** one row per available, non-hidden agent from `/api/agents`.
+  - `AgentStatus` comes from the latest runs: running if any run is live, failed if its latest run failed, otherwise idle.
+  - Clicking a row goes through `useStartAgent()`, the same path as ⌘K: @scout and @outlier propose a plan card with defaults (edit before approving), and @researcher opens the chat composer with the mention ready.
+  - `AgentStatus` gained a green `ready` state for connected services.
+- **Footer card:** Claude CLI status and version, a "Claude runs today" meter against the soft cap, and the engine connection. It links to Settings › Agents.
+- **Collapsing:** the sidebar collapses to a 64px icon rail with tooltips; it's remembered in localStorage and toggles with ⌘\.
+  - On phones it's still the slide-in sheet.
+  - The live panel now defaults to open only at ≥1280px. On smaller screens it overlays, so it starts closed; once toggled, your choice is remembered.
+- **Home** (`app/home-view.tsx`, style A, faint grid), all on real data:
+  - **Header:** local date and time (client-only, to avoid a hydration mismatch), "Mission control", and a summary built from live counts. "Ask the orchestrator" goes to Chat; "New run" (key N) opens ⌘K's "Start an agent".
+  - **Pending plans:** up to 2, as compact `PlanCard`s; Approve & run works in place.
+  - **Stat tiles:** Inbox (sparkline of stories created per day over the last 7 days, and new since yesterday), Shortlisted (how many have no dossier yet), Dossiers ready (latest one, or a warning if any have unresolved flags), Outliers this week (by `scanned_at`, with the top score and channel count).
+  - **Live agents:** `RunCard`s, live first, then finished runs collapsed.
+  - **Fuel today:** a `MeterBar` per provider, Claude first. Disabled providers show as "disabled". Totals for fallbacks and error rate, and the reset timezone.
+  - **Pipeline:** count per status, each linking to the board; Researching is cyan while non-zero.
+  - **Top picks:** the 3 highest-scored Inbox stories, with the "Unverified lead" label on hooks, Shortlist, and Research this (disabled if a dossier exists).
+- **SSE:** `/api/events` now sends a comment as soon as a client connects. Before, `EventSource` only opened at the first keep-alive ping, so every page showed "connecting" for about 15 s.
