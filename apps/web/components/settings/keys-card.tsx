@@ -17,6 +17,7 @@ const STATUS_STYLE: Record<KeyStatus["status"], string> = {
   set: "border-success/40 text-success",
   missing: "border-border text-muted-foreground",
   failing: "border-destructive/40 text-destructive",
+  disabled: "border-border text-subtle-foreground",
 }
 
 export function KeysCard() {
@@ -87,7 +88,7 @@ export function KeysCard() {
                 <TableCell className="w-72 text-right whitespace-normal">
                   {k.testable && k.provider && (
                     <div className="flex flex-col items-end gap-1">
-                      <Button size="xs" variant="outline" disabled={k.status === "missing" || testing !== null} onClick={() => test(k.provider!)}>
+                      <Button size="xs" variant="outline" disabled={k.status === "missing" || k.status === "disabled" || testing !== null} onClick={() => test(k.provider!)}>
                         {testing === k.provider ? <Loader2Icon className="animate-spin" /> : <PlugIcon />} Test connection
                       </Button>
                       {k.last_test && (

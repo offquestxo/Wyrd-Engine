@@ -209,6 +209,9 @@ class Router:
         usable: list[tuple[bool, RouteStep]] = []
         for step in self.config.tasks.get(task, []):
             provider = self.providers.get(step.provider)
+            if self.disabled(step.provider):
+                self._event(task, "skip", step.provider, "disabled in providers.yaml")
+                continue
             if provider is None or not provider.configured:
                 detail = getattr(
                     provider, "unconfigured_detail", "not configured (missing API key)"
@@ -287,6 +290,7 @@ class Router:
             self.config.model(step.provider, step.model).max_request_tokens
             for step in self.config.tasks.get(task, [])
             if (p := self.providers.get(step.provider)) is not None
+            and not self.disabled(step.provider)
             and p.configured
             and not self.auth_blocked(step.provider)
         ]
@@ -627,10 +631,18 @@ class Router:
         return await self._run("embed", call)
 
     # ------------------------------------------------------------------ status
+    def disabled(self, provider_name: str) -> bool:
+        pc = self.config.providers.get(provider_name)
+        return pc is not None and not pc.enabled
+
     async def test_connection(self, provider_name: str) -> ConnectionTest:
         provider = self.providers.get(provider_name)
         if provider is None:
             return ConnectionTest(provider=provider_name, ok=False, detail="unknown provider")
+        if self.disabled(provider_name):
+            return ConnectionTest(
+                provider=provider_name, ok=False, detail="disabled in config/providers.yaml"
+            )
         auth = getattr(provider, "auth_mode", None)
         if not provider.configured:
             env = self.config.providers[provider_name].api_key_env

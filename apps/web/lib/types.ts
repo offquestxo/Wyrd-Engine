@@ -111,7 +111,7 @@ export interface KeyStatus {
   env: string
   provider: string | null
   purpose: string
-  status: "set" | "missing" | "failing"
+  status: "set" | "missing" | "failing" | "disabled"
   preview: string
   testable: boolean
   last_test: ConnectionTest | null

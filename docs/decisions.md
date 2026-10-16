@@ -519,3 +519,16 @@ The stored login stopped working on the Claude side (expired or revoked, and the
   - 30 low: mostly "unsupported" on rows the excerpt check had verified. The reviewer sees only the dossier, not the sources.
   - 20 medium/high interpretation/superlative flags in Summary, Story Beats, Hook Ideas and Angles: "largest mining fraud in history", "mastermind", "Suharto forced", "Canada overhauled its rules to prevent a repeat", and a hook with an unsourced "river dust and a syringe".
   - These are unresolved on v1; the owner decides how to fix them.
+
+## Provider cleanup for the demo (2026-10-16)
+
+- **Mistral disabled.** `enabled: false` (new `ProviderConfig.enabled`, default true) in `config/providers.yaml`.
+  - Routes keep their Mistral steps; the router skips them with a "disabled in providers.yaml" event and no run-log warning.
+  - `request_budget` ignores Mistral.
+  - The connection test, `/api/keys`, `/api/providers` and the usage meters report `disabled`, which isn't an error. Settings shows it struck through in task routing.
+- **OpenRouter `long` alias** (`nvidia/nemotron-3-super-120b-a12b:free`, 262K context, 200K request budget) is the last fallback for `extract_from_document`, `extract_from_document_deep` and `analyze_outliers`.
+  - The existing `free` alias (Gemma 4 31B, 32K budget) wasn't reused: adding it would have shrunk every extraction chunk to 32K, since the route takes the smallest budget.
+  - Gemma 4 31B `:free` (262K) was rate-limited upstream when tested.
+  - Nemotron answered a live extraction in 11 s with valid JSON. It's the same model family as the NVIDIA fallback, but reached through OpenRouter with its own quota.
+  - Two aliases can now share a model ID; the usage meter counts that model once.
+- **Gemini OAuth expiry:** Google expires refresh tokens after 7 days only for apps in **Testing**. Publishing ("In production") removes that limit. Our scopes are sensitive, so without verification Google shows an "unverified app" warning (under the 100-user cap), which is fine for a personal tool. Steps are in the demo-prep report.

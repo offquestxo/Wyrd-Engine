@@ -84,6 +84,9 @@ providers:
         limits: { rpm: 40, rpd: null, tpm: null, tpd: null }
 
   mistral:
+    # Disabled 2026-10-16: the workspace's free tier is 0 requests/min. Set to true to re-enable;
+    # the routes below keep their Mistral steps and the router skips them while disabled.
+    enabled: false
     # https://docs.mistral.ai/api/  — free ("Experiment") tier is set per workspace:
     # 1 request/s, 500K tokens/min, 1B tokens/month (check admin.mistral.ai/plateforme/limits).
     # Model aliases below are Mistral's "-latest" pointers; context is 256K tokens for both.
@@ -116,6 +119,15 @@ providers:
       free:
         id: google/gemma-4-31b-it:free
         max_request_tokens: 32000
+        limits: { rpm: 20, rpd: 50, tpm: null, tpd: null }
+      long:
+        # Last fallback for long-document extraction and outlier analysis. Checked 2026-10-16
+        # against /api/v1/models: 262,144-token context, JSON + structured outputs. Live test:
+        # extraction answered in 11 s, while gemma-4-31b-it:free was rate-limited upstream.
+        # Same model family as the NVIDIA fallback, but OpenRouter's own quota and endpoint.
+        # Shares the free daily pool with `free`.
+        id: nvidia/nemotron-3-super-120b-a12b:free
+        max_request_tokens: 200000
         limits: { rpm: 20, rpd: 50, tpm: null, tpd: null }
 
   youtube:
@@ -190,16 +202,19 @@ tasks:
     - { provider: gemini, model: lite }
     - { provider: mistral, model: long }
     - { provider: nvidia, model: chat }
+    - { provider: openrouter, model: long }
   extract_from_document_deep:      # @researcher depth=deep only (Flash: 20 requests/day)
     - { provider: gemini, model: flash }
     - { provider: gemini, model: lite }
     - { provider: mistral, model: long }
     - { provider: nvidia, model: chat }
+    - { provider: openrouter, model: long }
   analyze_outliers:
     - { provider: gemini, model: lite }
     - { provider: mistral, model: long }
     - { provider: nvidia, model: chat }
     - { provider: groq, model: smart }
+    - { provider: openrouter, model: long }
   second_opinion:
     - { provider: nvidia, model: chat }
     - { provider: mistral, model: long }
