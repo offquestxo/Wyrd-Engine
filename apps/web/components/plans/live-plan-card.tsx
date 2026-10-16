@@ -139,7 +139,7 @@ export function LivePlanCard({ plan, onChange }: { plan: PlanRecord; onChange?: 
   )
 }
 
-function ParamChips({ params }: { params: Params }) {
+export function ParamChips({ params }: { params: Params }) {
   const entries = Object.entries(params)
   if (!entries.length) return <p className="mt-2 text-xs text-muted-foreground">Default parameters</p>
   return (
@@ -154,7 +154,7 @@ function ParamChips({ params }: { params: Params }) {
   )
 }
 
-function StepEditor({ value, onChange }: { step: PlanStepRecord; value: Params; onChange: (p: Params) => void }) {
+export function StepEditor({ value, onChange }: { step: PlanStepRecord; value: Params; onChange: (p: Params) => void }) {
   return (
     <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
       {Object.entries(value).map(([key, current]) => (
