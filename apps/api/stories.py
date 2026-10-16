@@ -8,7 +8,7 @@ from typing import Any
 
 from pydantic import BaseModel
 from sqlalchemy import Engine, text
-from sqlmodel import Session, col, select
+from sqlmodel import Session, col, func, select
 
 from apps.api import hook_figures
 from apps.api.config import load_scoring
@@ -108,6 +108,15 @@ def create_story(engine: Engine, data: StoryIn, added_by: str) -> Story:
 def known_source_urls(engine: Engine) -> set[str]:
     with Session(engine) as s:
         return set(s.exec(select(StorySource.url)).all())
+
+
+def title_exists(engine: Engine, title: str) -> bool:
+    """Case-insensitive: a story with this title is already saved (e.g. by a parallel run)."""
+    with Session(engine) as s:
+        return (
+            s.exec(select(Story.id).where(func.lower(Story.title) == title.strip().lower())).first()
+            is not None
+        )
 
 
 def known_titles(engine: Engine) -> set[str]:

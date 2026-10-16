@@ -72,6 +72,9 @@ def ground(
     cores = _cores(figure)
     if not cores:
         return None, None
+    # A year on its own ("1971 · founded") is a date, not a striking number.
+    if re.fullmatch(r"(?:in\s+)?(1[5-9]\d\d|20\d\d)s?", figure.strip(), re.I):
+        return None, None
     # A bare single digit ("1 piece of advice") isn't a thumbnail number.
     if all(len(c.replace(".", "")) == 1 for c in cores) and not re.search(
         r"[$€£%]|[a-z]", figure, re.I

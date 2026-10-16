@@ -663,3 +663,19 @@ The stored login stopped working on the Claude side (expired or revoked, and the
 - **Colour fixes:**
   - **Violet text:** text uses `brand-soft` (#C4B5FD), not `brand`. #7C3AED is about 3.5:1 on dark cards, which fails 4.5:1, so it stays for fills (buttons) only.
   - **Running status** (badge, Researching dot, run panel and run detail progress) is cyan, per rule 4. Violet is no longer used for status.
+
+## Demo data and two fixes it exposed (2026-10-16)
+
+- **Real runs:** @scout evergreen for Childhood Brands (run #13) and Everyday Genius (#14), 6 each, plus an @outlier scan of 3 channels × 50 videos (#15).
+  - YouTube usage: 6 units for the scan plus the gap finder's searches.
+  - The scan refreshed 150 videos and found the same 12 outliers, all already analysed.
+- **Fix: duplicate stories from parallel scout runs.** Runs #13 and #14 overlapped, and each saved Borders, American Apparel and Blockbuster.
+  - Both save loops now skip a title that already exists (`stories.title_exists`, case-insensitive) and log it.
+  - The 3 lower-scored copies were set to **Archived** (not deleted), with a note.
+- **Fix: years as thumbnail figures.** The scorer proposed "1971 · founded" and the like.
+  - `ground()` now drops a figure that is only a year, and `scout_scoring.md` says so.
+  - Year-only figures already saved were cleared.
+- **Circuit City** (created by hand in Phase 6) had no series, format, score or hook. It was scored once with `score_items` on its own source excerpts (Wikipedia and SEC filings): Tech Graveyard, Long, 7.07. Its hook is labelled as an unverified lead like any other.
+- **Status moves** so the pipeline and board show more than Inbox; all reversible:
+  - Circuit City and Bre-X → Scripting: both have verified dossiers.
+  - FTX and British Post Office scandal → Shortlisted: the two top-scored Inbox leads.
