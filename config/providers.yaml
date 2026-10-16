@@ -192,6 +192,11 @@ tasks:
   check_support:                   # does an excerpt support every part of a claim?
     - { provider: groq, model: smart }   # 120B: the 20B model misjudged dates live
     - { provider: nvidia, model: chat }
+  hook_figure:                     # thumbnail figure backfill (apps/api/hook_figures.py)
+    - { provider: groq, model: fast }
+    - { provider: gemini, model: gemma }
+    - { provider: nvidia, model: chat }
+    - { provider: openrouter, model: free }
   parse_mention:
     - { provider: groq, model: fast }
     - { provider: gemini, model: gemma }

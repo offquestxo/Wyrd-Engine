@@ -15,6 +15,8 @@ Also return:
 - **series**: one of Childhood Brands, Tech Graveyard, Fraud Files, Everyday Genius, Comebacks, Recent Collapses
 - **format**: "Short" or "Long"
 - **company**: the main company or brand the story is about (null if none)
+- **hook_figure**: the single most striking number for a thumbnail, copied **exactly as written in the item's title or snippet** (e.g. "$1.4 million", "3,400", "40,000"). Never calculate, round, convert or guess a number, and never use one from your own knowledge. Null if the item text has no number worth showing.
+- **hook_caption**: what that figure counts, at most 5 words, using the item's own wording where possible (e.g. "spent fighting Mamdani"). Null when hook_figure is null.
 
 {{series_hint}}
 

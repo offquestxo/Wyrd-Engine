@@ -404,3 +404,17 @@ def test_prefilter_drops_obvious_noise() -> None:
     kept, dropped = scout.prefilter(leads, rules)
     assert [k.item.url for k in kept] == ["https://1", "https://7"]
     assert dropped == {"too short": 1, "title pattern": 2, "no business keyword": 2}
+
+
+def test_scout_keeps_only_figures_found_in_the_item_text() -> None:
+    s = score("x")
+    s.hook_figure, s.hook_caption = "$80M", "bribery scheme"
+    assert scout.grounded_figure(s, "Ex-CEO indicted in $80M bribery scheme") == {
+        "hook_figure": "$80M",
+        "hook_caption": "bribery scheme",
+    }
+    s.hook_figure = "$800M"  # not in the headline: dropped, never invented
+    assert scout.grounded_figure(s, "Ex-CEO indicted in $80M bribery scheme") == {
+        "hook_figure": None,
+        "hook_caption": None,
+    }

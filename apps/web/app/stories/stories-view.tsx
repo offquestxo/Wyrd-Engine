@@ -6,7 +6,7 @@ import { useMemo, useState } from "react"
 import { toast } from "sonner"
 
 import { ScoreBar, StoryStatusBadge, UnverifiedBadge } from "@/components/common/badges"
-import { PageHeader } from "@/components/common/page-header"
+import { SeriesChip, SeriesDot } from "@/components/blocks/series"
 import { EmptyState, ErrorState, LoadingState } from "@/components/common/states"
 import { ScoutLauncher } from "@/components/stories/scout-launcher"
 import { StoriesBoard } from "@/components/stories/stories-board"
@@ -20,7 +20,8 @@ import { useStories } from "@/hooks/use-live"
 import { useLocalState } from "@/hooks/use-local-state"
 import { api } from "@/lib/api"
 import { timeAgo } from "@/lib/format"
-import { SERIES, STORY_STATUSES, type Story, type StoryStatus } from "@/lib/types"
+import { SERIES_STYLES } from "@/lib/series"
+import { STORY_STATUSES, type Story, type StoryStatus } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
 type SortKey = "title" | "status" | "score" | "gap" | "updated"
@@ -32,9 +33,9 @@ export function StoriesView() {
   const params = useSearchParams()
   const { data, isLoading, error, mutate } = useStories()
   const stories = useMemo(() => data ?? [], [data])
-  const [view, setView] = useLocalState<"table" | "board">("wyrd.storiesView", "table")
+  const [view, setView] = useLocalState<"table" | "board">("wyrd.storiesView", "board")
   const [query, setQuery] = useState("")
-  const [status, setStatus] = useState<string>(ALL)
+  const [status, setStatus] = useState<string>(() => params.get("status") ?? ALL)
   const [series, setSeries] = useState<string>(ALL)
   const [format, setFormat] = useState<string>(ALL)
   const [minScore, setMinScore] = useState<string>(ALL)
@@ -94,22 +95,52 @@ export function StoriesView() {
   const filtersActive = [status, series, format, minScore].some((f) => f !== ALL) || query
 
   return (
-    <div className="mx-auto max-w-7xl px-8 py-8">
-      <PageHeader
-        title="Stories"
-        description="Every candidate story, from Inbox to Published."
-        actions={
-          <>
-            <Tabs value={view} onValueChange={(v) => setView(v as "table" | "board")}>
-              <TabsList>
-                <TabsTrigger value="table"><TableIcon /> Table</TabsTrigger>
-                <TabsTrigger value="board"><KanbanIcon /> Board</TabsTrigger>
-              </TabsList>
-            </Tabs>
-            <ScoutLauncher />
-          </>
-        }
-      />
+    <div className="surface-creative min-h-full">
+    <div className="mx-auto max-w-[1400px] px-4 py-6 md:px-8 md:py-8">
+      <header className="mb-5 flex flex-wrap items-end justify-between gap-4">
+        <div className="flex flex-col gap-1">
+          <h1 className="font-display text-[34px] leading-tight font-extrabold tracking-[-1px]">Stories</h1>
+          <p className="text-[14.5px] text-[#a9a69e]">Every candidate story, from Inbox to Published. Colour = series.</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <Tabs value={view} onValueChange={(v) => setView(v as "table" | "board")}>
+            <TabsList className="h-11">
+              <TabsTrigger value="board" className="h-9"><KanbanIcon /> Board</TabsTrigger>
+              <TabsTrigger value="table" className="h-9"><TableIcon /> Table</TabsTrigger>
+            </TabsList>
+          </Tabs>
+          <ScoutLauncher size="default" label="Find stories" className="h-11 rounded-xl px-4 font-display text-[15px] font-extrabold" />
+        </div>
+      </header>
+
+      <div role="group" aria-label="Series" className="mb-3 flex flex-wrap gap-2">
+        <button
+          type="button"
+          aria-pressed={series === ALL}
+          onClick={() => setSeries(ALL)}
+          className={cn(
+            "h-9 rounded-full px-3.5 text-[13px] transition-colors",
+            series === ALL ? "bg-foreground-warm font-semibold text-background-creative" : "border border-white/8 bg-card-creative text-[#e2dfd7] hover:border-white/20",
+          )}
+        >
+          All series
+        </button>
+        {SERIES_STYLES.map((s) => (
+          <button
+            key={s.key}
+            type="button"
+            aria-pressed={series === s.label}
+            onClick={() => setSeries(series === s.label ? ALL : s.label)}
+            className={cn(
+              "inline-flex h-9 items-center rounded-full px-3.5 transition-colors",
+              series === s.label ? "bg-foreground-warm font-semibold text-background-creative" : "border border-white/8 bg-card-creative text-[#e2dfd7] hover:border-white/20",
+            )}
+          >
+            <SeriesChip series={s.label} variant="filter" />
+            <span className="num ml-2 text-[11.5px] opacity-60">{stories.filter((x) => x.series === s.label).length}</span>
+          </button>
+        ))}
+      </div>
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <div className="relative w-56">
@@ -117,7 +148,6 @@ export function StoriesView() {
           <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Filter stories…" className="h-8 pl-8" />
         </div>
         <Filter value={status} onChange={setStatus} label="Status" options={STORY_STATUSES} />
-        <Filter value={series} onChange={setSeries} label="Series" options={SERIES} />
         <Filter value={format} onChange={setFormat} label="Format" options={["Short", "Long"]} />
         <Filter value={minScore} onChange={setMinScore} label="Score" options={["6", "7", "8"]} format={(v) => `≥ ${v}`} />
         {filtersActive && (
@@ -147,14 +177,14 @@ export function StoriesView() {
           icon={LayersIcon}
           title="No stories yet"
           description="Run @scout to find story leads. They land here with status Inbox."
-          action={<ScoutLauncher />}
+          action={<ScoutLauncher label="Find stories" />}
         />
       ) : filtered.length === 0 ? (
         <EmptyState icon={SearchIcon} title="No stories match these filters" />
       ) : view === "board" ? (
-        <StoriesBoard stories={filtered} onOpen={setOpen} onMove={(s, to) => void move(s, to)} />
+        <StoriesBoard stories={filtered} selectedId={openId} onOpen={setOpen} onMove={(s, to) => void move(s, to)} />
       ) : (
-        <div className="overflow-hidden rounded-lg border">
+        <div className="overflow-x-auto rounded-xl border border-white/7 bg-card-creative">
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
@@ -186,7 +216,11 @@ export function StoriesView() {
                     )}
                   </TableCell>
                   <TableCell><StoryStatusBadge status={s.status} /></TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{s.series ?? "—"}</TableCell>
+                  <TableCell className="text-xs whitespace-nowrap text-muted-foreground">
+                    <span className="inline-flex items-center gap-2">
+                      <SeriesDot series={s.series} /> {s.series ?? "—"}
+                    </span>
+                  </TableCell>
                   <TableCell className="text-xs text-muted-foreground">{s.format ?? "—"}</TableCell>
                   <TableCell>{s.total_score !== null ? <ScoreBar value={s.total_score} /> : "—"}</TableCell>
                   <TableCell className="font-mono text-xs">{s.gap_score ?? "—"}</TableCell>
@@ -199,6 +233,7 @@ export function StoriesView() {
       )}
 
       <StoryDrawer storyId={openId} onOpenChange={(open) => !open && setOpen(null)} onMove={(s, to) => void move(s, to)} />
+    </div>
     </div>
   )
 }

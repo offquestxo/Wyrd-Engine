@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from sqlalchemy import Engine, text
 from sqlmodel import Session, col, select
 
+from apps.api import hook_figures
 from apps.api.config import load_scoring
 from apps.api.db.models import Dossier, Story, StorySource, StoryStatus, utcnow
 
@@ -57,6 +58,8 @@ class StoryIn(BaseModel):
     series: str | None = None
     format: str | None = None
     hook: str | None = None
+    hook_figure: str | None = None  # already grounded in the source text by the caller
+    hook_caption: str | None = None
     scores: dict[str, Any] | None = None
     gap_score: float | None = None
     notes: str | None = None
@@ -76,6 +79,8 @@ def create_story(engine: Engine, data: StoryIn, added_by: str) -> Story:
             series=data.series,
             format=data.format,
             hook=data.hook,
+            hook_figure=data.hook_figure,
+            hook_caption=data.hook_caption,
             scores=scores or None,
             gap_score=data.gap_score,
             notes=data.notes,
@@ -110,9 +115,19 @@ def known_titles(engine: Engine) -> set[str]:
         return {t.lower() for t in s.exec(select(Story.title)).all()}
 
 
-def story_view(s: Session, story: Story, full: bool = False) -> dict[str, Any]:
+def story_view(
+    s: Session,
+    story: Story,
+    full: bool = False,
+    key_numbers: dict[int, list[dict[str, Any]]] | None = None,
+) -> dict[str, Any]:
     view = story.model_dump(mode="json")
     view["total_score"] = (story.scores or {}).get("total")
+    if key_numbers is None:
+        key_numbers = hook_figures.key_numbers_by_story(s, [story.id or 0])
+    view["hook_figure_verified"] = hook_figures.confirmed(
+        story.hook_figure, key_numbers.get(story.id or 0, [])
+    )
     sources = s.exec(select(StorySource).where(StorySource.story_id == story.id)).all()
     view["source_count"] = len(sources)
     if full:
@@ -156,7 +171,9 @@ def list_stories(
                     )
                 ]
                 stmt = stmt.where(col(Story.id).in_(ids))
-        return [story_view(s, st) for st in s.exec(stmt).all()]
+        rows = s.exec(stmt).all()
+        numbers = hook_figures.key_numbers_by_story(s, [st.id or 0 for st in rows])
+        return [story_view(s, st, key_numbers=numbers) for st in rows]
 
 
 def get_story(engine: Engine, story_id: int) -> dict[str, Any] | None:
