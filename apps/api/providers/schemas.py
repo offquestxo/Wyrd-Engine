@@ -38,6 +38,21 @@ class ItemScore(BaseModel):
     series: Series
     format: Literal["Short", "Long"]
     company: str | None = Field(default=None, description="main company/brand, if any")
+    hook_figure: str | None = Field(
+        default=None,
+        description="the most striking number exactly as written in the item text, e.g. "
+        "'$1.4 million' or '3,400'; null if the text has none",
+    )
+    hook_caption: str | None = Field(
+        default=None, description="what the figure counts, at most 5 words; null if no figure"
+    )
+
+
+class HookFigure(BaseModel):
+    figure: str | None = Field(
+        default=None, description="the most striking number exactly as written in the text"
+    )
+    caption: str | None = Field(default=None, description="what it counts, at most 5 words")
 
 
 class ScoreBatch(BaseModel):

@@ -23,7 +23,7 @@ from datetime import UTC, datetime, timedelta
 from functools import partial
 from typing import TYPE_CHECKING, Any
 
-from apps.api import prompts
+from apps.api import hook_figures, prompts
 from apps.api.agents.dedup import (
     load_vectors,
     normalize_url,
@@ -162,6 +162,7 @@ async def run_news(
                 series=lead.score.series,
                 format=lead.score.format,
                 hook=lead.score.hook,
+                **grounded_figure(lead.score, f"{lead.item.title}\n{lead.item.snippet}"),
                 scores=score_dict(lead.score) | {"scored_by": lead.scored_by},
                 notes=f"Found by @scout (run #{ctx.run_id}) via {lead.origin}.",
                 sources=[to_source(lead.item, lead.primary)]
@@ -481,6 +482,12 @@ def prefilter(leads: list[Lead], rules: dict[str, Any]) -> tuple[list[Lead], dic
     return kept, dict(dropped)
 
 
+def grounded_figure(score: ItemScore, source_text: str) -> dict[str, str | None]:
+    """The scorer's thumbnail figure, kept only if its numbers are in the item text."""
+    figure, caption = hook_figures.ground(score.hook_figure, score.hook_caption, source_text)
+    return {"hook_figure": figure, "hook_caption": caption}
+
+
 def score_dict(score: ItemScore) -> dict[str, Any]:
     return score.model_dump(
         include={"drama", "twist", "relatability", "visual_potential", "hook_number", "freshness"}
@@ -692,6 +699,7 @@ async def run_evergreen(
                 series=c.score.series,
                 format=c.score.format,
                 hook=c.score.hook,
+                **grounded_figure(c.score, f"{c.title}\n{c.summary}"),
                 scores=score_dict(c.score) | {"scored_by": c.scored_by},
                 gap_score=c.gap,
                 notes=note,

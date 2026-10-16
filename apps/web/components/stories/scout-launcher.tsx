@@ -10,11 +10,12 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { SERIES } from "@/lib/types"
+import { cn } from "@/lib/utils"
 
 const ANY = "any"
 
 /** Pick @scout parameters, then propose a plan (the owner approves it on the plan card). */
-export function ScoutLauncher({ size = "sm" }: { size?: "sm" | "default" }) {
+export function ScoutLauncher({ size = "sm", label = "Run @scout", className }: { size?: "sm" | "default"; label?: string; className?: string }) {
   const propose = useProposePlan()
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -38,8 +39,8 @@ export function ScoutLauncher({ size = "sm" }: { size?: "sm" | "default" }) {
 
   return (
     <>
-      <Button size={size} onClick={() => setOpen(true)} className="bg-brand text-brand-foreground hover:bg-brand/90">
-        <RadarIcon /> Run @scout
+      <Button size={size} onClick={() => setOpen(true)} className={cn("bg-brand text-brand-foreground hover:bg-brand/90", className)}>
+        <RadarIcon /> {label}
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-md">

@@ -619,3 +619,30 @@ The stored login stopped working on the Claude side (expired or revoked, and the
   - Scout results are a row of `ThumbnailBlock sm`s linking to the stories (series colour; figure once stage 4 adds it).
   - Other agents list their items.
 - **Composer:** rounded card, quick @scout/@outlier/@researcher buttons (they replace any leading mention), and a Bricolage "Send →". @-autocomplete and Enter/Shift+Enter work as before.
+
+## Redesign stage 4: Stories and thumbnail figures (2026-10-16)
+
+- **Data:** migration `0007_hook_figure.sql` adds `stories.hook_figure` and `stories.hook_caption`.
+  - `hook_figure_verified` isn't stored. `stories.story_view` computes it from the latest dossier version's Key Numbers, so it can't go stale. List views compute it in one query.
+- **Integrity** (`apps/api/hook_figures.py`):
+  - **`ground()`** keeps a figure only if every number in it appears in the source text the model was given, ignoring thousands separators and notation ("$1.4M" ↔ "$1.4 Million"). Otherwise the figure and caption are dropped.
+  - Also dropped: bare single digits ("1 piece of advice"), captions over 5 words, and captions that just repeat the figure.
+  - **`confirmed()`** compares values with scale words applied ("$1.4M" = "$1.4 million") against the dossier's Key Number figures.
+  - The UI shows "?" for unverified and ✓ for confirmed.
+- **@scout:** `prompts/scout_scoring.md` asks for `hook_figure` (copied exactly from the item's title or snippet: never calculated, converted or recalled) and `hook_caption` (at most 5 words). `ItemScore` validates them. `scout.grounded_figure()` grounds them against that item's title and snippet (news) or title and Wikipedia summary (evergreen) before saving.
+- **Backfill** (`python -m apps.api.hook_figures backfill [--dry-run]`): a new router task `hook_figure` (Groq → Gemma → NVIDIA → OpenRouter; `prompts/hook_figure.md`) proposes a figure from the story's own text: its headline, its sources' titles and excerpts, and its dossier's Key Numbers, which are themselves sourced. The proposal goes through `ground()`.
+  - **Run on 2026-10-16:** 14 of 25 stories got a figure.
+  - 2 proposals were dropped by the filters (a bare "1"; a figure missing from the text).
+  - Bre-X (70,000,000 troy ounces) and Circuit City ($3.4 billion) are ✓-confirmed by their dossiers.
+  - Five captions were tidied by hand using only words from each story's own headline (e.g. "for Miro", "in fraud schemes"). No figures were edited.
+- **UI** (creative style):
+  - **Page:** Bricolage title, Board (now the default)/Table toggle, "Find stories" (the @scout launcher), and series filter chips with colour squares and counts. The other filters are unchanged. `?status=` preselects a status (Home's pipeline links use it).
+  - **Board columns:** one per status; Archived only when it has stories, and empty columns say "Drop a story here".
+  - **Cards:** `ThumbnailBlock sm`, name, mono score, series · format. Drag-and-drop is kept. A card whose story has a live @researcher run glows cyan and shows that run's progress.
+  - **Table:** keeps its layout and adds `SeriesDot`.
+  - **Drawer:**
+    - `ThumbnailBlock lg` with a line saying whether the figure is confirmed.
+    - Bricolage name and mono score; the hook (Unverified lead); series/format/status chips.
+    - Scores as A-style cream bars, plus gap score and sources (n primary).
+    - Research this (or "Research again"), Move to… (all statuses), Open sources (expands the list).
+    - Dossier versions, notes, and "Ask about it in Chat".

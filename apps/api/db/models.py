@@ -80,6 +80,8 @@ class Story(SQLModel, table=True):
     series: str | None = None
     format: str | None = None
     hook: str | None = None
+    hook_figure: str | None = None  # from source text only; see apps/api/hook_figures.py
+    hook_caption: str | None = None
     scores: dict[str, Any] | None = Field(default=None, sa_type=JSON)
     gap_score: float | None = None
     outlier_ref: int | None = Field(default=None, foreign_key="videos.id")

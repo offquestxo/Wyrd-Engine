@@ -35,6 +35,7 @@ from apps.api.providers.base import (
 )
 from apps.api.providers.schemas import (
     DocExtraction,
+    HookFigure,
     ItemScore,
     ItemToScore,
     MentionParse,
@@ -502,6 +503,11 @@ class Router:
 
     async def parse_mention(self, text: str) -> MentionParse:
         return await self._json_task("parse_mention", "parse_mention", text, MentionParse)
+
+    async def propose_hook_figure(self, source_text: str) -> HookFigure:
+        """A thumbnail figure + caption from a story's source text. Callers must ground it
+        (apps/api/hook_figures.ground): this only proposes."""
+        return await self._json_task("hook_figure", "hook_figure", source_text, HookFigure)
 
     async def extract_from_document(
         self, document: str, question: str, deep: bool = False
