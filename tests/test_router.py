@@ -487,3 +487,14 @@ async def test_check_support_near_limit_groq_counts_as_fallback(engine: Any) -> 
     assert lenient.primary == "groq/groq-model" and groq.calls == []
     strict = await router.check_support(items, primary_only=True)
     assert strict.served_by == ["groq/groq-model"] and strict.fallback is False
+
+
+def test_provider_timeout_comes_from_config() -> None:
+    from apps.api.config import load_providers
+    from apps.api.providers.router import build_providers
+
+    config = load_providers()
+    built = build_providers(config)
+    assert config.providers["nvidia"].timeout_s == 150
+    assert built["nvidia"]._timeout == 150  # type: ignore[attr-defined]
+    assert built["groq"]._timeout == 60.0  # type: ignore[attr-defined]  # adapter default

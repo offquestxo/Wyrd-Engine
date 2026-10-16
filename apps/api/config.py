@@ -34,6 +34,7 @@ class ProviderConfig(BaseModel):
     json_mode: bool = False
     models: dict[str, ModelConfig] = Field(default_factory=dict)
     limits: dict[str, int | None] = Field(default_factory=dict)
+    timeout_s: float | None = Field(default=None, gt=0)  # HTTP timeout; None → adapter default
 
 
 class RouteStep(BaseModel):
