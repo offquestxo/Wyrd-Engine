@@ -3,14 +3,50 @@
 import useSWR from "swr"
 
 import { ErrorState, LoadingState } from "@/components/common/states"
+import { MeterBar } from "@/components/blocks/meter-bar"
 import { ConfigEditor } from "@/components/settings/config-editor"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { useUsage } from "@/hooks/use-live"
 import { fetcher } from "@/lib/api"
 import { formatNumber } from "@/lib/format"
 import type { ConfigFile, ProviderSummary } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
 type Route = { provider: string; model: string }
+
+/** Today's usage per provider (same meters as Home's "Fuel today"). */
+function TodayMeters() {
+  const { data, isLoading } = useUsage()
+  if (isLoading) return <LoadingState rows={3} />
+  const meters = (data?.meters ?? []).filter((m) => m.provider !== "claude")
+  if (!meters.length) return null
+  return (
+    <section>
+      <h3 className="mb-3 text-sm font-medium">
+        Today <span className="font-normal text-subtle-foreground">· resets midnight {data?.timezone.split("/").pop()?.replace("_", " ")}</span>
+      </h3>
+      <div className="grid gap-5 rounded-xl border bg-card p-[18px] sm:grid-cols-2">
+        {meters.map((m) =>
+          m.status === "disabled" ? (
+            <div key={m.provider} className="flex items-center justify-between text-[13.5px] text-subtle-foreground">
+              <span>{m.label}</span>
+              <span className="text-xs">disabled in providers.yaml</span>
+            </div>
+          ) : (
+            <MeterBar
+              key={m.provider}
+              label={m.label}
+              used={m.used}
+              limit={m.limit}
+              unit={m.unit === "requests" ? "req" : m.unit}
+              hint={m.status === "missing" ? "no key set" : m.status === "failing" ? "key failing: test it under API keys" : undefined}
+            />
+          ),
+        )}
+      </div>
+    </section>
+  )
+}
 
 export function ProvidersCard() {
   const providers = useSWR<ProviderSummary[]>("/api/providers", fetcher)
@@ -27,6 +63,7 @@ export function ProvidersCard() {
 
   return (
     <div className="space-y-8">
+      <TodayMeters />
       <section>
         <h3 className="mb-2 text-sm font-medium">Task routing</h3>
         <p className="mb-3 text-xs text-muted-foreground">

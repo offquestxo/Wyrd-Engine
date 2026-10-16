@@ -54,7 +54,7 @@ export function RunPanel({ onClose }: { onClose: () => void }) {
               </div>
               <p className="mt-1.5 truncate text-xs text-foreground/80">{run.current_step}</p>
               <div className="mt-2 h-1 overflow-hidden rounded-full bg-muted">
-                <div className="h-full bg-brand transition-all" style={{ width: `${(run.progress ?? 0) * 100}%` }} />
+                <div className="h-full bg-live transition-all" style={{ width: `${(run.progress ?? 0) * 100}%` }} />
               </div>
               <p className="mt-1.5 font-mono text-[10px] text-muted-foreground">
                 run #{run.id} · {run.started_at ? duration(run.started_at, null, now) : "queued"}
@@ -83,7 +83,7 @@ export function RunPanel({ onClose }: { onClose: () => void }) {
             <div key={e.id} className="border-b border-border/50 pb-1.5">
               <div className="flex gap-2">
                 <span className="text-muted-foreground/60">{clock(e.ts)}</span>
-                <span className={cn(e.data.ok === false || e.type.endsWith("error") ? "text-destructive" : "text-brand")}>
+                <span className={cn(e.data.ok === false || e.type.endsWith("error") ? "text-destructive" : "text-brand-soft")}>
                   {e.type}
                 </span>
               </div>

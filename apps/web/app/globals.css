@@ -245,7 +245,7 @@
   @apply my-3 list-decimal space-y-1 pl-5;
 }
 .prose-dossier a {
-  @apply text-brand underline-offset-2 hover:underline;
+  @apply text-brand-soft underline-offset-2 hover:underline;
 }
 .prose-dossier code {
   @apply rounded bg-muted px-1 py-0.5 font-mono text-xs;

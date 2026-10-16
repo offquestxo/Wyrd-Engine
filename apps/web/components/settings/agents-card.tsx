@@ -38,7 +38,7 @@ export function AgentsCard() {
           <div key={agent.name} className="flex items-center gap-4 px-4 py-3">
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
-                <span className="font-mono text-sm text-brand">@{agent.name}</span>
+                <span className="font-mono text-sm text-brand-soft">@{agent.name}</span>
                 {agent.uses_claude && <Badge variant="outline" className="gap-1 text-[10px]"><SparklesIcon className="size-3" /> Claude</Badge>}
                 {agent.uses_youtube_quota && <Badge variant="outline" className="text-[10px]">YouTube quota</Badge>}
                 {!agent.available && <Badge variant="outline" className="text-[10px] text-muted-foreground">v2</Badge>}

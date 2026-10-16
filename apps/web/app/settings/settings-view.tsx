@@ -30,7 +30,8 @@ export function SettingsView() {
   const tab = useSearchParams().get("tab") ?? "keys"
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-8 sm:px-8">
+    <div className="bg-grid min-h-full">
+    <div className="mx-auto max-w-5xl px-4 py-6 md:px-8 md:py-8">
       <PageHeader title="Settings" description="Keys, providers, agents, and the config files in config/." />
       <Tabs value={tab} onValueChange={(t) => router.replace(`${pathname}?tab=${t}`, { scroll: false })}>
         <TabsList className="mb-6 flex-wrap">
@@ -54,6 +55,7 @@ export function SettingsView() {
         <TabsContent value="notion"><NotionCard /></TabsContent>
         <TabsContent value="system"><SystemCard /></TabsContent>
       </Tabs>
+    </div>
     </div>
   )
 }
