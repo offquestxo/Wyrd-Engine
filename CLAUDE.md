@@ -96,4 +96,4 @@ You are building and maintaining the wyrd.exe story engine: a local app that fin
   sidebar + Home, creative Chat and Stories (thumbnail figures grounded in source text, ✓ when a dossier
   confirms), Outliers, A pass on Research/Settings/run detail. Mistral disabled; OpenRouter long fallback.
   Bre-X dossier v2 resolves its second-opinion flags. Demo walkthrough: docs/demo-script.md.
-  Not pushed yet (owner pushes after review).
+  Pushed (3a7290a).
