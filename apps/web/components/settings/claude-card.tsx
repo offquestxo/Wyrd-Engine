@@ -8,6 +8,7 @@ import useSWR from "swr"
 import { ErrorState, LoadingState } from "@/components/common/states"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { ClaudeStatusPanel } from "@/components/settings/claude-status"
 import { api, fetcher } from "@/lib/api"
 
 interface ClaudeSettings {
@@ -45,8 +46,9 @@ export function ClaudeCard() {
   return (
     <section className="space-y-3 rounded-lg border p-4">
       <div className="flex items-center gap-2 text-sm font-medium">
-        <SparklesIcon className="size-4 text-brand" /> Claude usage
+        <SparklesIcon className="size-4 text-brand" /> Claude
       </div>
+      <ClaudeStatusPanel />
       <p className="text-xs text-muted-foreground">
         Your Pro plan is shared with other Claude use, and its usage isn&apos;t readable by apps. The engine counts its own
         Claude calls (chat turns plus Claude agent runs) per day and warns at 80% of this soft cap. Nothing is blocked.

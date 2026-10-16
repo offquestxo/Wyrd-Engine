@@ -30,7 +30,7 @@ import { useChat, useChats } from "@/hooks/use-chat"
 import { useUsage } from "@/hooks/use-live"
 import { api, fetcher } from "@/lib/api"
 import { timeAgo } from "@/lib/format"
-import type { ChatDetail, ChatMessageRecord, ChatSummary, ClaudeStatus, PlanRecord } from "@/lib/types"
+import { claudeUsable, type ChatDetail, type ChatMessageRecord, type ChatSummary, type ClaudeStatus, type PlanRecord } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
 export function ChatView() {
@@ -47,7 +47,7 @@ export function ChatView() {
   const bottomRef = useRef<HTMLDivElement>(null)
   const health = useSWR<{ claude: ClaudeStatus | null }>("/api/health", fetcher, { refreshInterval: 60_000 })
   const claude = health.data?.claude
-  const claudeReady = !claude || (claude.installed && claude.logged_in)
+  const claudeReady = claudeUsable(claude)
 
   const select = (id: number | null) => {
     const next = new URLSearchParams(params.toString())

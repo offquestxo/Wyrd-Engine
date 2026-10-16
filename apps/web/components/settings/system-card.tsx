@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { useEvents } from "@/hooks/use-events"
 import { API_BASE, fetcher } from "@/lib/api"
+import { CLAUDE_STATE_LABEL, claudeStateClass } from "@/components/settings/claude-status"
 import type { ClaudeStatus } from "@/lib/types"
 
 export function SystemCard() {
@@ -24,8 +25,8 @@ export function SystemCard() {
         ) : (
           claude.data && (
             <div className="flex items-center gap-3">
-              <Badge variant="outline" className={claude.data.logged_in ? "border-success/40 text-success" : "border-warning/40 text-warning"}>
-                {claude.data.installed ? (claude.data.logged_in ? "ready" : "not logged in") : "not installed"}
+              <Badge variant="outline" className={claudeStateClass(claude.data.state)}>
+                {CLAUDE_STATE_LABEL[claude.data.state]}
               </Badge>
               <span className="font-mono text-xs text-muted-foreground">{claude.data.version ?? ""}</span>
               <Button size="icon-xs" variant="ghost" onClick={() => claude.mutate()} aria-label="Re-check Claude CLI">
@@ -35,8 +36,11 @@ export function SystemCard() {
           )
         )}
       </Row>
-      {claude.data && !claude.data.logged_in && (
-        <p className="px-4 py-2 text-xs text-muted-foreground">{claude.data.detail}</p>
+      {claude.data && claude.data.state !== "ready" && (
+        <p className="px-4 py-2 text-xs text-muted-foreground">
+          {claude.data.detail}
+          {claude.data.output && <span className="mt-1 block font-mono text-[11px]">CLI said: {claude.data.output.replace(/\s+/g, " ")}</span>}
+        </p>
       )}
       <Row label="Engine API"><span className="font-mono text-xs">{API_BASE || "same origin /api → 127.0.0.1:8000"}</span></Row>
       <Row label="Live events (SSE)">

@@ -451,3 +451,47 @@ The claim-support checker's fallback (NVIDIA) is more lenient than Groq.
 - A dossier checked by a fallback records `checks.support_checked_by`. Its markdown header says the check "ran on a fallback model …; re-check with Groq". The Research page shows a **checked by fallback** badge and a **Re-check with Groq** button.
 - `POST /api/dossiers/{story_id}/recheck` re-runs every check on the latest version with Groq pinned (`primary_only`, no fallback) and saves the result as a new version, carrying the second-opinion review over with `recheck_of_version`.
 - If Groq can't run (rate limit or outage), it returns 503 and saves nothing.
+
+## Claude agent outage: root cause and status check (2026-10-16)
+
+**Symptom:** chat (orchestrator) and @researcher stopped working after 2026-10-07; @mention fast paths kept working.
+
+**Root cause: the Claude Code CLI really was logged out.** The engine's check was right; its message just didn't show any evidence. Timeline (UTC):
+- 02:35, last successful Claude call (fast-path outlier plan; the last @researcher run was on 10-06).
+- 21:57:31, the real `claude -p` turn for chat #5 already failed with "Not logged in · Please run /login".
+- 21:57:43, the CLI rewrote its macOS keychain item (`Claude Code-credentials`).
+- 21:59:07, the startup check (`claude auth status --json` → `loggedIn: false`, exit 1) blocked the next turn.
+
+The stored login stopped working on the Claude side (expired or revoked, and the CLI cleared it). Nothing in the repo changed it.
+
+**Ruled out:**
+- **A CLI update changed the status format.** The binary (`/opt/homebrew/bin/claude` → npm `@anthropic-ai/claude-code`, 2.1.196) hasn't changed since 2026-06-30, and `auth status --json` still prints `loggedIn`/`authMethod`.
+- **A different environment under `make dev`.** The API process logs `claude cli: /opt/homebrew/bin/claude · 2.1.196 · state=logged_out · HOME=/Users/rei`, which matches a clean `env -i` shell and an unsandboxed one. There is only one install and no `CLAUDE_CONFIG_DIR`.
+- **Keychain access denied.** Every environment I tried reported the same logged-out state, and the keychain item itself is readable.
+
+**Fix:** `claude auth login` (owner). The engine changes below make the next failure explain itself.
+
+**Status check changes (`apps/api/system.py`):**
+- `ClaudeStatus.state` is one of `ready`, `logged_out`, `unknown` or `not_installed`.
+- Stdout and stderr are captured separately, and the JSON object is found even with warnings around it.
+- If `--json` stops working, the check asks `claude auth status` in plain text.
+- Output the check can't read is `unknown`, never "logged out".
+- Chat blocks only on a definite `logged_out`/`not_installed` (`ClaudeStatus.usable`). On `unknown` it makes the real call and shows that call's error.
+- The status carries the CLI's own output: trimmed to 400 chars, with emails, `sk-ant-…` tokens and long opaque ids redacted.
+- It also carries the `claude` path. The API logs path, version, state and HOME at startup through uvicorn's logger; app loggers aren't configured, so their INFO lines don't print.
+
+**UI:**
+- Settings › Agents › Claude card: CLI status, version, and **Re-check** (a fresh check). When not ready, it shows `$ claude auth status --json` and what the CLI printed.
+- The top banner and the Settings › System row show the same output, with a link to Re-check.
+
+**Tests:** `tests/test_system.py` covers:
+- the real 2.1.196 logged-out output;
+- logged in;
+- logged in with a stderr warning;
+- unknown formats (empty, timed out, renamed key, `--json` rejected, new text) → `unknown`;
+- the plain-text fallback;
+- redaction.
+
+`tests/test_chat.py` checks that an `unknown` status still calls Claude.
+
+**Dev:** `.claude/launch.json` gains an `api` entry (`make api`) so the API can be started from the preview tools.

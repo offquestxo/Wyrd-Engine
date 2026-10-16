@@ -154,13 +154,22 @@ export interface ConfigFile {
   data: Record<string, unknown>
 }
 
+export type ClaudeState = "ready" | "logged_out" | "unknown" | "not_installed"
+
 export interface ClaudeStatus {
   installed: boolean
   logged_in: boolean
+  state: ClaudeState
   version: string | null
   auth_method: string | null
   detail: string
+  /** What `claude auth status` printed (trimmed, emails/tokens redacted). */
+  output: string | null
+  path: string | null
 }
+
+/** Claude work is blocked only on a definite "no"; "unknown" still tries the real call. */
+export const claudeUsable = (s: ClaudeStatus | null | undefined) => !s || s.state === "ready" || s.state === "unknown"
 
 export interface EngineEvent {
   id: number
