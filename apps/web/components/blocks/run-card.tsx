@@ -140,7 +140,7 @@ export function RunCard({ run, steps, className }: { run: RunRecord; steps?: str
                 log.level === "error" && "text-destructive-text",
               )}
             >
-              <span className="text-[#5b6072]">{clock(log.ts)}</span> {log.message}
+              <span className="text-[#767b8e]">{clock(log.ts)}</span> {log.message}
               {i === arr.length - 1 && run.status === "running" && <span className="text-live motion-safe:animate-pulse">▍</span>}
             </div>
           ))}

@@ -549,3 +549,29 @@ The stored login stopped working on the Claude side (expired or revoked, and the
 - **Badge:** `unresolved_flags` = medium/high second-opinion flags minus recorded resolutions. It shows as "N unresolved flags" on the Research page (list and header); the total flag count is shown separately, in grey.
   - A second-opinion re-run moves earlier resolutions under `previous`: they answered a different review, so the new flags count until a new version resolves them.
   - Bre-X v1: 16 unresolved; v2: 0.
+
+## Redesign stage 1: tokens, fonts, series map, shared components (2026-10-16)
+
+- **Tokens** (`app/globals.css`) are the handoff's hex values.
+  - Violet `--brand` (#7C3AED) is now also `--primary`, so default buttons are violet app-wide.
+  - Status colours each have a `-text` variant for text on dark backgrounds.
+  - Added `--subtle-foreground` (tertiary grey), `--card-creative`, `--background-creative`, `--foreground-warm` and the series block/ink colours.
+  - `--radius` is 10px, so cards (`rounded-xl`) are 14px.
+  - Utilities: `.bg-grid` (40px, 2.5% white), `.surface-creative`, `.glow-live`/`.glow-brand`/`.glow-destructive` (the halo drops under `prefers-reduced-motion`), and `.num` (Geist Mono, tabular).
+- **Fonts:** Bricolage Grotesque (500/700/800) via `next/font/google` as `font-display`, for creative headings and thumbnail figures only.
+- **`lib/series.ts`** is the only place series colours live: `seriesStyle()` and `SERIES_STYLES`. "No series" is a dark slate block.
+- **Components** in `components/blocks/`:
+  - `ThumbnailBlock`: 16:9 block with figure and caption; falls back to the company name; long text shrinks.
+    - "?" marks an unverified figure, ✓ one confirmed by a dossier. (The handoff only asked for ✓; "?" is kept so an unconfirmed figure never looks confirmed.)
+  - `SeriesChip`/`SeriesDot` and `StatTile` (with sparkline).
+  - `MeterBar`: cyan below 70%, amber from 70%, red from 90%; with no known limit it shows a dashed track instead of a fake bar.
+  - `AgentStatus`.
+  - `RunCard`: live card with step segments when the caller knows the steps, otherwise one progress bar, plus the log tail. Finished runs collapse to one line.
+  - `PlanCard` v2: compact (Home) and creative (Chat) variants. ⌘⏎/Ctrl+⏎ approves the focused card; Edit reuses the inline step editor.
+- **Preview:** `/dev/components` (404 in production) shows them on live data: stories, usage, runs and plans. Dashed boxes are labelled state fixtures, for states the data doesn't have yet.
+- **Contrast** (WCAG, measured on every surface):
+  - Muted grey #A3A8B8 is 6.8–8.4:1, tertiary #8C91A3 5.1–6.4:1, status text colours 8.5+:1, white on violet 5.7:1, and ink on series blocks 5.1–17.4:1.
+  - The mockup's log timestamp grey #5B6072 (about 3:1) failed, so it became #767B8E (4.7:1).
+- **Checked at 1440px and 375px:** no horizontal overflow.
+  - Known shell issue, left for stage 2: the live panel defaults to open and covers the page on phones.
+- **Plan steps** no longer list disabled providers.

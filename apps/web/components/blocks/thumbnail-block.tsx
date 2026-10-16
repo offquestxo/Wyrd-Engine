@@ -82,8 +82,8 @@ export function ThumbnailBlock({
         {caption && (
           <span
             className={cn(
-              "truncate font-display font-extrabold uppercase",
-              size === "lg" ? "text-sm" : "text-[10.5px] tracking-[0.2px]",
+              "font-display font-extrabold uppercase",
+              size === "lg" ? "line-clamp-2 text-sm" : "truncate text-[10.5px] tracking-[0.2px]",
             )}
           >
             {caption}

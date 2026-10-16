@@ -74,13 +74,15 @@ def step_providers(agent: str) -> list[str]:
     providers.yaml), then YouTube and Claude when it uses them."""
     info = AGENTS[agent]
     try:
-        routes = load_providers().tasks
+        config = load_providers()
+        routes = config.tasks
+        disabled = {name for name, pc in config.providers.items() if not pc.enabled}
     except Exception:  # config errors must not break showing a plan
-        routes = {}
+        routes, disabled = {}, set()
     names: list[str] = []
     for task in info.tasks:
         for step in routes.get(task, []):
-            if step.provider not in names:
+            if step.provider not in names and step.provider not in disabled:
                 names.append(step.provider)
     if info.uses_youtube_quota:
         names.append("youtube")
