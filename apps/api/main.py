@@ -472,6 +472,21 @@ async def recheck_dossier(story_id: int) -> dict[str, Any]:
     return result
 
 
+@app.post("/api/dossiers/{story_id}/second-opinion")
+async def rerun_second_opinion(story_id: int) -> dict[str, Any]:
+    """Re-run only the second-opinion review on the latest version (same version, no new one)."""
+    try:
+        result = await dossier_mod.rerun_second_opinion(
+            get_engine(), story_id, get_router().second_opinion
+        )
+    except LookupError as e:
+        raise HTTPException(404, str(e)) from e
+    except dossier_mod.SecondOpinionUnavailable as e:
+        raise HTTPException(503, str(e)) from e
+    bus.publish("dossier.saved", story_id=story_id, version=result["version"])
+    return result
+
+
 @app.post("/api/dossiers/{story_id}/open")
 async def open_dossier_file(story_id: int) -> dict[str, Any]:
     """Reveal the exported dossier.md on this machine (Finder on macOS)."""

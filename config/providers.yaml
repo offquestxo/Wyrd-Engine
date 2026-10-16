@@ -67,6 +67,9 @@ providers:
     base_url: https://integrate.api.nvidia.com/v1
     api_key_env: NVIDIA_API_KEY
     json_mode: false           # JSON requested via prompt; validated + repaired by the router
+    # A full second opinion is a long reply; on a slow day (2026-10-16, ~32 tokens/s) it took
+    # over 60 s, the adapter default, so every attempt timed out.
+    timeout_s: 150
     models:
       # IDs checked against the live list at https://integrate.api.nvidia.com/v1/models
       chat:

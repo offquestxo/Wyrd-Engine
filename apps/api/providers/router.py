@@ -671,9 +671,13 @@ def build_providers(config: ProvidersConfig) -> dict[str, LLMProvider]:
     built: dict[str, LLMProvider] = {}
     for name, pc in config.providers.items():
         key = settings.key_for(pc.api_key_env) if pc.api_key_env else ""
+        timeout: dict[str, Any] = {"timeout_s": pc.timeout_s} if pc.timeout_s else {}
         if name in simple:
             built[name] = simple[name](
-                base_url=pc.base_url or "", api_key=key, api_key_env=pc.api_key_env or ""
+                base_url=pc.base_url or "",
+                api_key=key,
+                api_key_env=pc.api_key_env or "",
+                **timeout,
             )
         elif name == "mistral":
             small = pc.models.get("small")
@@ -682,6 +686,7 @@ def build_providers(config: ProvidersConfig) -> dict[str, LLMProvider]:
                 api_key=key,
                 api_key_env=pc.api_key_env or "",
                 probe_model=small.id if small else "",
+                **timeout,
             )
         elif name == "nvidia":
             embed = pc.models.get("embed")
@@ -691,6 +696,7 @@ def build_providers(config: ProvidersConfig) -> dict[str, LLMProvider]:
                 api_key_env=pc.api_key_env or "",
                 probe_model=embed.id if embed else "",
                 probe_extra=embed.extra if embed else None,
+                **timeout,
             )
         elif name == "gemini" and gemini_uses_oauth():
             # OAuth takes priority over GEMINI_API_KEY whenever GEMINI_AUTH=oauth.

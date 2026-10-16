@@ -503,3 +503,19 @@ The stored login stopped working on the Claude side (expired or revoked, and the
 - **Seen during the run, not part of this fix:**
   - NVIDIA timed out three times, so the second opinion was unavailable (the save goes ahead, as designed).
   - One `extract_from_document` call failed on every provider (NVIDIA returned invalid JSON). Claude retried with another page.
+
+## Re-running a dossier's second opinion; NVIDIA timeout (2026-10-16)
+
+- **Why:** the Bre-X dossier (run #12) saved without a second opinion: NVIDIA "timed out" three times, Mistral has 0 quota and the Gemini OAuth login had expired.
+- **NVIDIA wasn't down:**
+  - A one-word request answered in 0.6 s.
+  - The full second opinion (3.4k prompt tokens, a long JSON reply) ran at about 32 tokens/s and needed more than 60 s, the adapter's hardcoded HTTP timeout.
+  - The HTTP timeout is now configurable per provider (`timeout_s` in `config/providers.yaml`); NVIDIA is set to 150 s and every other provider keeps the 60 s default.
+- **`rerun_second_opinion` / `POST /api/dossiers/{story_id}/second-opinion`** re-runs only the review on the latest version.
+  - Claims don't change, so it updates the same version (no new one): new `flags` and `overall`, `rerun: true`, the earlier outcome under `previous`, and earlier resolutions kept.
+  - If no provider answers, it returns 503 and changes nothing.
+  - New flags are left for the owner or a new research run to resolve; the engine doesn't edit claims.
+- **Bre-X result (NVIDIA, about 2 min):** 50 flags.
+  - 30 low: mostly "unsupported" on rows the excerpt check had verified. The reviewer sees only the dossier, not the sources.
+  - 20 medium/high interpretation/superlative flags in Summary, Story Beats, Hook Ideas and Angles: "largest mining fraud in history", "mastermind", "Suharto forced", "Canada overhauled its rules to prevent a repeat", and a hook with an unsourced "river dust and a syringe".
+  - These are unresolved on v1; the owner decides how to fix them.

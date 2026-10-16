@@ -817,3 +817,60 @@ async def test_recheck_without_groq_changes_nothing(engine: Any, tmp_path: Path)
     with pytest.raises(dmod.RecheckUnavailable, match="Nothing was changed"):
         await dmod.recheck_with_primary(engine, 1, groq_down, lookup, research_dir=tmp_path)
     assert dmod.list_dossiers(engine)[0]["versions"] == [1]
+
+
+async def test_rerun_second_opinion_updates_the_same_version(engine: Any, tmp_path: Path) -> None:
+    from apps.api.providers.schemas import ClaimFlag, SecondOpinion
+
+    await dmod.save_dossier(
+        engine,
+        1,
+        make_dossier(),
+        lookup,
+        research_dir=tmp_path,
+        support=support_by("groq/x"),
+        second_opinion={"flags": [], "overall": "unavailable: timeout", "resolutions": [{"a": 1}]},
+    )
+    seen: list[str] = []
+
+    async def review(markdown: str) -> SecondOpinion:
+        seen.append(markdown)
+        return SecondOpinion(
+            flags=[
+                ClaimFlag(
+                    claim="c", issue="i", severity="low", suggestion="s", kind="interpretation"
+                )
+            ],
+            overall="mostly fine",
+        )
+
+    out = await dmod.rerun_second_opinion(engine, 1, review)
+    assert seen and seen[0] == dmod.get_dossier(engine, 1)["markdown"]  # type: ignore[index]
+    assert out["version"] == 1 and out["versions"] == [1] and out["flags"] == 1
+    so = out["second_opinion"]
+    assert so["overall"] == "mostly fine" and so["rerun"] is True
+    assert so["previous"]["overall"] == "unavailable: timeout"
+    assert so["resolutions"] == [{"a": 1}]  # earlier resolutions kept
+
+
+async def test_rerun_second_opinion_unavailable_changes_nothing(
+    engine: Any, tmp_path: Path
+) -> None:
+    from apps.api.providers.base import ProviderError
+
+    await dmod.save_dossier(
+        engine,
+        1,
+        make_dossier(),
+        lookup,
+        research_dir=tmp_path,
+        support=support_by("groq/x"),
+        second_opinion={"flags": [], "overall": "unavailable: timeout"},
+    )
+
+    async def down(markdown: str) -> Any:
+        raise ProviderError("nvidia", "timeout")
+
+    with pytest.raises(dmod.SecondOpinionUnavailable, match="Nothing was changed"):
+        await dmod.rerun_second_opinion(engine, 1, down)
+    assert dmod.get_dossier(engine, 1)["second_opinion"]["overall"] == "unavailable: timeout"  # type: ignore[index]

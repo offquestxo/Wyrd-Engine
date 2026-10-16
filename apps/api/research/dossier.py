@@ -925,6 +925,53 @@ def get_dossier(engine: Engine, story_id: int, version: int | None = None) -> di
         }
 
 
+class SecondOpinionUnavailable(RuntimeError):
+    """No provider could give a second opinion; nothing was changed."""
+
+
+async def rerun_second_opinion(
+    engine: Engine,
+    story_id: int,
+    review_fn: Callable[[str], Awaitable[Any]],
+) -> dict[str, Any]:
+    """Re-run only the second-opinion review on the latest version (e.g. after it was
+    unavailable during the run). The claims don't change, so the review is updated on the
+    same version: new flags and overall, earlier resolutions kept, the previous outcome kept
+    as `previous`. New flags are for the owner (or a new research run) to resolve."""
+    with Session(engine) as s:
+        latest = s.exec(
+            select(Dossier)
+            .where(Dossier.story_id == story_id)
+            .order_by(col(Dossier.version).desc())
+        ).first()
+        if latest is None or not latest.markdown:
+            raise LookupError(f"no dossier for story {story_id}")
+        markdown, version = latest.markdown, latest.version
+    try:
+        review = await review_fn(markdown)
+    except ProviderError as e:
+        raise SecondOpinionUnavailable(
+            f"No provider could give a second opinion ({e}). Nothing was changed."
+        ) from e
+    with Session(engine) as s:
+        row = s.exec(
+            select(Dossier).where(Dossier.story_id == story_id, Dossier.version == version)
+        ).one()
+        old = dict(row.second_opinion or {})
+        row.second_opinion = old | {
+            "flags": [f.model_dump() for f in review.flags],
+            "overall": review.overall,
+            "at": utcnow().isoformat(),
+            "rerun": True,
+            "previous": {"flags": old.get("flags", []), "overall": old.get("overall")},
+        }
+        s.add(row)
+        s.commit()
+    result = get_dossier(engine, story_id, version)
+    assert result is not None
+    return result
+
+
 class RecheckUnavailable(RuntimeError):
     """The primary support checker (Groq) couldn't run; nothing was saved."""
 
