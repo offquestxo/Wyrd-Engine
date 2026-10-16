@@ -174,6 +174,8 @@ async def events(
 def _key_status(env: str, value: str, provider: str | None) -> str:
     if env == "SEC_USER_AGENT":
         return "set" if "@" in value and "your@email.com" not in value else "missing"
+    if provider is not None and get_router().disabled(provider):
+        return "disabled"
     if not value:
         return "missing"
     last: ConnectionTest | None = state["tests"].get(provider) if provider else None
@@ -247,7 +249,12 @@ async def providers_status() -> list[dict[str, Any]]:
             {
                 "provider": name,
                 "key_env": pc.api_key_env,
-                "status": "set" if key else ("n/a" if not pc.api_key_env else "missing"),
+                "status": "disabled"
+                if not pc.enabled
+                else "set"
+                if key
+                else ("n/a" if not pc.api_key_env else "missing"),
+                "enabled": pc.enabled,
                 "key_preview": mask_secret(key),
                 "models": {alias: m.id for alias, m in pc.models.items()},
                 "model_limits": {alias: m.limits.model_dump() for alias, m in pc.models.items()},

@@ -126,14 +126,16 @@ const STATUS_DOT: Record<string, string> = {
   set: "bg-success",
   failing: "bg-destructive",
   missing: "bg-muted-foreground/40",
+  disabled: "border border-subtle-foreground bg-transparent",
 }
 
 function MeterCard({ meter }: { meter: ProviderMeter }) {
   const pct = meter.limit ? Math.min(100, (meter.used / meter.limit) * 100) : null
   const tone = pct === null ? "bg-info" : pct >= 80 ? "bg-destructive" : pct >= 60 ? "bg-warning" : "bg-brand"
-  const statusLabel = meter.status === "missing" ? "No key" : meter.status === "failing" ? "Key failing" : "Connected"
+  const statusLabel =
+    meter.status === "missing" ? "No key" : meter.status === "failing" ? "Key failing" : meter.status === "disabled" ? "Disabled in providers.yaml" : "Connected"
   return (
-    <Card className={cn("gap-3 py-4", meter.status === "missing" && "opacity-60")}>
+    <Card className={cn("gap-3 py-4", (meter.status === "missing" || meter.status === "disabled") && "opacity-60")}>
       <CardHeader className="px-4">
         <CardTitle className="flex items-center justify-between text-sm">
           {meter.label}

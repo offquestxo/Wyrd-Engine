@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { fetcher } from "@/lib/api"
 import { formatNumber } from "@/lib/format"
 import type { ConfigFile, ProviderSummary } from "@/lib/types"
+import { cn } from "@/lib/utils"
 
 type Route = { provider: string; model: string }
 
@@ -21,6 +22,7 @@ export function ProvidersCard() {
 
   const tasks = (config.data?.data.tasks ?? {}) as Record<string, Route[]>
   const modelId = (r: Route) => providers.data?.find((p) => p.provider === r.provider)?.models[r.model] ?? r.model
+  const disabled = new Set(providers.data?.filter((p) => p.status === "disabled").map((p) => p.provider))
   const lim = (n: number | null) => (n === null ? "—" : formatNumber(n))
 
   return (
@@ -28,7 +30,7 @@ export function ProvidersCard() {
       <section>
         <h3 className="mb-2 text-sm font-medium">Task routing</h3>
         <p className="mb-3 text-xs text-muted-foreground">
-          First provider is primary; the rest are fallbacks. Providers without a key, or whose key was just rejected, are skipped.
+          First provider is primary; the rest are fallbacks. Providers without a key, whose key was just rejected, or that are disabled in providers.yaml are skipped.
         </p>
         <div className="overflow-hidden rounded-lg border">
           <Table>
@@ -44,10 +46,10 @@ export function ProvidersCard() {
                   <TableCell className="font-mono text-xs">{task}</TableCell>
                   <TableCell className="text-xs">
                     {route.map((r, i) => (
-                      <span key={i}>
+                      <span key={i} className={disabled.has(r.provider) ? "opacity-50" : undefined} title={disabled.has(r.provider) ? "disabled in providers.yaml" : undefined}>
                         {i > 0 && <span className="px-1.5 text-muted-foreground">→</span>}
-                        <span className={i === 0 ? "text-foreground" : "text-muted-foreground"}>{r.provider}</span>
-                        <span className="font-mono text-[10px] text-muted-foreground"> {modelId(r)}</span>
+                        <span className={cn(i === 0 ? "text-foreground" : "text-muted-foreground", disabled.has(r.provider) && "line-through")}>{r.provider}</span>
+                        <span className="font-mono text-[10px] text-muted-foreground"> {disabled.has(r.provider) ? "disabled" : modelId(r)}</span>
                       </span>
                     ))}
                   </TableCell>

@@ -35,6 +35,7 @@ class ProviderConfig(BaseModel):
     models: dict[str, ModelConfig] = Field(default_factory=dict)
     limits: dict[str, int | None] = Field(default_factory=dict)
     timeout_s: float | None = Field(default=None, gt=0)  # HTTP timeout; None → adapter default
+    enabled: bool = True  # false: kept in config, skipped by the router, shown as "disabled"
 
 
 class RouteStep(BaseModel):

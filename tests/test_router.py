@@ -498,3 +498,26 @@ def test_provider_timeout_comes_from_config() -> None:
     assert config.providers["nvidia"].timeout_s == 150
     assert built["nvidia"]._timeout == 150  # type: ignore[attr-defined]
     assert built["groq"]._timeout == 60.0  # type: ignore[attr-defined]  # adapter default
+
+
+def test_disabled_provider_is_skipped_and_reported(monkeypatch: Any) -> None:
+    from apps.api.config import load_providers
+    from apps.api.providers.router import Router
+
+    config = load_providers()
+    assert config.providers["mistral"].enabled is False
+    assert any(s.provider == "mistral" for s in config.tasks["extract_from_document"])  # kept
+    router = Router(config, {}, None)  # type: ignore[arg-type]
+    assert router.disabled("mistral") and not router.disabled("nvidia")
+    assert all(s.provider != "mistral" for s in router._route("extract_from_document"))
+
+
+def test_openrouter_long_context_fallback() -> None:
+    from apps.api.config import load_providers
+
+    config = load_providers()
+    long = config.model("openrouter", "long")
+    assert long.id.endswith(":free") and long.max_request_tokens == 200000
+    for task in ("extract_from_document", "extract_from_document_deep", "analyze_outliers"):
+        assert config.tasks[task][-1].provider == "openrouter"
+        assert config.tasks[task][-1].model == "long"

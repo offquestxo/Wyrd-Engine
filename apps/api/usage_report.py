@@ -80,7 +80,11 @@ def build_report(
             day = _aggregate(s, since_day, name)
             minute = _aggregate(s, since_min, name)
             models = []
+            seen: set[str] = set()
             for alias, m in pc.models.items():
+                if m.id in seen:  # two aliases can share a model (and its usage)
+                    continue
+                seen.add(m.id)
                 d = day.get(m.id, {})
                 mm = minute.get(m.id, {})
                 models.append(
