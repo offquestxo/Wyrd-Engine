@@ -11,28 +11,30 @@ export interface SeriesStyle {
   ink: string
   /** Short key for CSS/data attributes. */
   key: string
+  /** Two-letter code for small tiles (thread list). */
+  short: string
 }
 
 const STYLES: Record<Series, SeriesStyle> = {
-  "Fraud Files": { label: "Fraud Files", key: "fraud", block: "var(--series-fraud)", ink: "var(--series-fraud-ink)" },
-  "Tech Graveyard": { label: "Tech Graveyard", key: "tech", block: "var(--series-tech)", ink: "var(--series-tech-ink)" },
+  "Fraud Files": { short: "FF", label: "Fraud Files", key: "fraud", block: "var(--series-fraud)", ink: "var(--series-fraud-ink)" },
+  "Tech Graveyard": { short: "TG", label: "Tech Graveyard", key: "tech", block: "var(--series-tech)", ink: "var(--series-tech-ink)" },
   "Childhood Brands": {
-    label: "Childhood Brands",
+    short: "CB", label: "Childhood Brands",
     key: "childhood",
     block: "var(--series-childhood)",
     ink: "var(--series-childhood-ink)",
   },
-  Comebacks: { label: "Comebacks", key: "comebacks", block: "var(--series-comebacks)", ink: "var(--series-comebacks-ink)" },
-  "Everyday Genius": { label: "Everyday Genius", key: "genius", block: "var(--series-genius)", ink: "var(--series-genius-ink)" },
+  Comebacks: { short: "CO", label: "Comebacks", key: "comebacks", block: "var(--series-comebacks)", ink: "var(--series-comebacks-ink)" },
+  "Everyday Genius": { short: "EG", label: "Everyday Genius", key: "genius", block: "var(--series-genius)", ink: "var(--series-genius-ink)" },
   "Recent Collapses": {
-    label: "Recent Collapses",
+    short: "RC", label: "Recent Collapses",
     key: "collapses",
     block: "var(--series-collapses)",
     ink: "var(--series-collapses-ink)",
   },
 }
 
-const NONE: SeriesStyle = { label: "No series", key: "none", block: "var(--series-none)", ink: "var(--series-none-ink)" }
+const NONE: SeriesStyle = { label: "No series", short: "", key: "none", block: "var(--series-none)", ink: "var(--series-none-ink)" }
 
 export function seriesStyle(series: string | null | undefined): SeriesStyle {
   return series && series in STYLES ? STYLES[series as Series] : NONE

@@ -30,7 +30,7 @@ from apps.api import memory
 from apps.api.agents import orchestrator
 from apps.api.agents.registry import AGENTS
 from apps.api.config import OrchestratorConfig
-from apps.api.db.models import AgentRun, Chat, Message, Plan, utcnow
+from apps.api.db.models import AgentRun, Chat, Dossier, Message, Plan, PlanStep, Story, utcnow
 from apps.api.events import EventBus
 from apps.api.plans import PlanError, PlanIn, PlanService, StepIn
 from apps.api.providers.base import ProviderError
@@ -73,6 +73,67 @@ def chat_view(c: Chat, **extra: Any) -> dict[str, Any]:
         "created_at": c.created_at.isoformat(),
         "updated_at": c.updated_at.isoformat(),
     } | extra
+
+
+def thread_status(s: Session, chat_id: int) -> dict[str, Any] | None:
+    """What the thread list shows under a chat's title: its latest plan, in a few words.
+
+    {"label": "Plan waiting" | "@scout running" | "Dossier v2" | "@outlier done" | ...,
+     "state": "waiting" | "running" | "done" | "failed" | "cancelled",
+     "agent": first step's agent, "series": a story series to colour the thread tile,
+     "at": ISO time of the latest change}
+    """
+    plans = s.exec(
+        select(Plan).where(Plan.chat_id == chat_id).order_by(col(Plan.id).desc()).limit(10)
+    ).all()
+    if not plans:
+        return None
+    pending = next((p for p in plans if p.status == "pending"), None)
+    plan = pending or plans[0]
+    steps = s.exec(
+        select(PlanStep).where(PlanStep.plan_id == plan.id).order_by(col(PlanStep.order))
+    ).all()
+    if not steps:
+        return None
+    first = steps[0]
+    runs = {
+        r.id: r
+        for r in s.exec(
+            select(AgentRun).where(col(AgentRun.id).in_([st.run_id for st in steps if st.run_id]))
+        ).all()
+    }
+    run = runs.get(first.run_id) if first.run_id else None
+    at = run.finished_at if run and run.finished_at else plan.decided_at or plan.created_at
+
+    # A story to colour the tile: the researched story, or scout's top result.
+    story_id = (first.params or {}).get("story_id")
+    if not story_id and run and run.result:
+        top = (run.result.get("stories") or [{}])[0] if first.agent == "scout" else {}
+        story_id = top.get("id") if isinstance(top, dict) else None
+    story = s.get(Story, story_id) if isinstance(story_id, int) else None
+
+    if pending is not None:
+        label, state = "Plan waiting", "waiting"
+    elif any(st.status in ("running", "queued") for st in steps):
+        running = next(st for st in steps if st.status in ("running", "queued"))
+        label, state = f"@{running.agent} running", "running"
+    elif plan.status in ("failed", "cancelled"):
+        label, state = f"@{first.agent} {plan.status}", plan.status
+    else:
+        state = "done"
+        dossier = (
+            s.exec(select(Dossier).where(Dossier.run_id == run.id)).first()
+            if run is not None and first.agent == "researcher"
+            else None
+        )
+        label = f"Dossier v{dossier.version}" if dossier else f"@{first.agent} done"
+    return {
+        "label": label,
+        "state": state,
+        "agent": first.agent,
+        "series": story.series if story else None,
+        "at": at.isoformat() if at else None,
+    }
 
 
 # ---------------------------------------------------------------------------- results
@@ -170,6 +231,7 @@ class ChatService:
                         message_count=counts.get(c.id or 0, 0),
                         preview=(last.content[:120] if last else ""),
                         busy=c.id in self._busy,
+                        status=thread_status(s, c.id or 0),
                     )
                 )
             return out

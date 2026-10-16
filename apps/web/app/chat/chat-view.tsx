@@ -2,7 +2,9 @@
 
 import {
   AlertTriangleIcon,
+  BookOpenTextIcon,
   BotIcon,
+  FlameIcon,
   InfoIcon,
   Loader2Icon,
   MenuIcon,
@@ -23,7 +25,8 @@ import { toast } from "sonner"
 import { EmptyState, ErrorState, LoadingState } from "@/components/common/states"
 import { Composer } from "@/components/chat/composer"
 import { ResultCard } from "@/components/chat/result-card"
-import { LivePlanCard } from "@/components/plans/live-plan-card"
+import { PlanCard } from "@/components/blocks/plan-card"
+import { SeriesChip } from "@/components/blocks/series"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet"
 import { useChat, useChats } from "@/hooks/use-chat"
@@ -31,6 +34,7 @@ import { useUsage } from "@/hooks/use-live"
 import { api, fetcher } from "@/lib/api"
 import { timeAgo } from "@/lib/format"
 import { claudeUsable, type ChatDetail, type ChatMessageRecord, type ChatSummary, type ClaudeStatus, type PlanRecord } from "@/lib/types"
+import { seriesStyle } from "@/lib/series"
 import { cn } from "@/lib/utils"
 
 export function ChatView() {
@@ -42,6 +46,7 @@ export function ChatView() {
   const selected = Number(params.get("chat")) || null
   const activeId = selected ?? chats.data?.[0]?.id ?? null
   const chat = useChat(activeId)
+  const activeSummary = chats.data?.find((c) => c.id === activeId)
   const [threadsOpen, setThreadsOpen] = useState(false)
   const [sending, setSending] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -118,21 +123,25 @@ export function ChatView() {
   )
 
   return (
-    <div className="flex h-full">
-      <aside className="hidden w-64 shrink-0 flex-col border-r md:flex">{threadList}</aside>
+    <div className="surface-creative flex h-full">
+      <aside className="hidden w-[272px] shrink-0 flex-col border-r border-white/6 bg-sidebar md:flex">{threadList}</aside>
       <Sheet open={threadsOpen} onOpenChange={setThreadsOpen}>
-        <SheetContent side="left" className="w-72 p-0">
+        <SheetContent side="left" className="w-72 bg-sidebar p-0">
           <SheetTitle className="sr-only">Chats</SheetTitle>
           <div className="flex h-full flex-col">{threadList}</div>
         </SheetContent>
       </Sheet>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4 sm:px-6">
+        <header className="flex min-h-16 shrink-0 flex-wrap items-center gap-3 border-b border-white/6 px-4 py-3 sm:px-8">
           <Button variant="ghost" size="icon-sm" className="md:hidden" onClick={() => setThreadsOpen(true)} aria-label="Chats">
             <MenuIcon />
           </Button>
-          <h1 className="min-w-0 flex-1 truncate text-sm font-medium">{chat.data?.title ?? "Chat"}</h1>
+          <h1 className="min-w-0 flex-1 truncate font-display text-xl font-extrabold tracking-[-0.5px] sm:flex-none sm:text-2xl">{chat.data?.title ?? "Chat"}</h1>
+          {activeSummary?.status?.series && <SeriesChip series={activeSummary.status.series} />}
+          <span className="ml-auto hidden font-mono text-[11.5px] text-subtle-foreground sm:inline">
+            {chat.data ? (chat.data.has_session ? "orchestrator · session resumed" : "orchestrator · new session") : ""}
+          </span>
           <ClaudeMeterChip />
           {chat.data && (
             <Button variant="ghost" size="icon-sm" onClick={() => void remove(chat.data!.id)} aria-label="Delete chat" disabled={chat.data.busy}>
@@ -142,7 +151,7 @@ export function ChatView() {
         </header>
 
         {!claudeReady && claude && (
-          <div role="status" className="flex items-start gap-2 border-b border-warning/20 bg-warning/5 px-4 py-2 text-xs sm:px-6">
+          <div role="status" className="flex items-start gap-2 border-b border-warning/20 bg-warning/5 px-4 py-2 text-xs sm:px-8">
             <AlertTriangleIcon className="mt-0.5 size-3.5 shrink-0 text-warning" />
             <span className="text-foreground/80">
               The orchestrator is unavailable: {claude.detail} You can still use <span className="font-mono">@scout</span> and{" "}
@@ -152,7 +161,7 @@ export function ChatView() {
         )}
 
         <div className="min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-8">
+          <div className="mx-auto max-w-[860px] px-4 py-6 sm:px-6 sm:py-7">
             {chats.isLoading || (activeId && chat.isLoading) ? (
               <LoadingState rows={3} />
             ) : chats.error ? (
@@ -177,7 +186,7 @@ export function ChatView() {
                 description="Try “What stories do we have in Fraud Files?” or “@scout 10 news stories about restaurant chains”."
               />
             ) : (
-              <div className="space-y-5">
+              <div className="flex flex-col gap-[22px]">
                 {messages.map((m) => (
                   <Message key={m.id} message={m} chat={chat.data!} stream={chat.streams[m.id]} activity={chat.activity} />
                 ))}
@@ -191,7 +200,7 @@ export function ChatView() {
             )}
           </div>
         </div>
-        <div className="mx-auto w-full max-w-3xl px-4 pb-4 sm:px-6 sm:pb-6">
+        <div className="mx-auto w-full max-w-[860px] px-4 pb-4 sm:px-6 sm:pb-7">
           <Composer key={compose} initial={compose} onSend={send} busy={sending || Boolean(chat.data?.busy)} />
         </div>
       </div>
@@ -218,13 +227,18 @@ function ThreadList({
 }) {
   return (
     <>
-      <div className="flex h-14 shrink-0 items-center justify-between px-4">
-        <span className="text-sm font-medium">Chats</span>
-        <Button variant="ghost" size="icon-sm" onClick={onNew} aria-label="New chat">
-          <MessageSquarePlusIcon />
-        </Button>
+      <div className="flex shrink-0 items-center justify-between px-[18px] pt-5 pb-3.5">
+        <h2 className="font-display text-[22px] font-extrabold tracking-[-0.4px]">Chats</h2>
+        <button
+          type="button"
+          onClick={onNew}
+          aria-label="New chat"
+          className="flex size-10 items-center justify-center rounded-xl bg-foreground-warm text-background-creative transition-opacity hover:opacity-90"
+        >
+          <MessageSquarePlusIcon className="size-[18px]" />
+        </button>
       </div>
-      <div className="flex-1 space-y-0.5 overflow-y-auto px-2 pb-3">
+      <div className="flex flex-1 flex-col gap-1 overflow-y-auto px-3 pb-3">
         {loading ? (
           <LoadingState rows={4} className="px-2" />
         ) : error ? (
@@ -241,21 +255,61 @@ function ThreadList({
             <button
               key={t.id}
               onClick={() => onSelect(t.id)}
+              aria-current={t.id === activeId ? "true" : undefined}
               className={cn(
-                "w-full rounded-md px-2.5 py-2 text-left transition-colors hover:bg-muted",
-                t.id === activeId && "bg-muted",
+                "flex w-full items-center gap-3 rounded-xl p-2.5 text-left transition-colors hover:bg-card-creative",
+                t.id === activeId && "bg-card-creative shadow-[inset_0_0_0_1px_rgb(167_139_250/0.3)]",
               )}
             >
-              <p className="flex items-center gap-1.5 truncate text-sm">
-                {t.busy && <Loader2Icon className="size-3 shrink-0 animate-spin text-brand" />}
-                <span className="truncate">{t.title}</span>
-              </p>
-              <p className="text-[11px] text-muted-foreground">{timeAgo(t.updated_at)}</p>
+              <ThreadTile chat={t} />
+              <span className="flex min-w-0 flex-col gap-0.5">
+                <span className={cn("flex items-center gap-1.5 truncate text-sm", t.id === activeId && "font-medium")}>
+                  {t.busy && <Loader2Icon className="size-3 shrink-0 animate-spin text-live" />}
+                  <span className="truncate">{t.title}</span>
+                </span>
+                <span
+                  className={cn(
+                    "truncate text-[12.5px]",
+                    t.status?.state === "waiting"
+                      ? "text-brand-soft"
+                      : t.status?.state === "running"
+                        ? "text-live-text"
+                        : t.status?.state === "failed"
+                          ? "text-destructive-text"
+                          : "text-subtle-foreground",
+                  )}
+                >
+                  {t.status ? `${t.status.label}${t.status.state === "waiting" || t.status.state === "running" ? "" : ` · ${timeAgo(t.status.at ?? t.updated_at)}`}` : timeAgo(t.updated_at)}
+                </span>
+              </span>
             </button>
           ))
         )}
       </div>
     </>
+  )
+}
+
+/** Series tile (two-letter code) for threads about a story; an icon for outlier/research/other threads. */
+function ThreadTile({ chat }: { chat: ChatSummary }) {
+  const series = chat.status?.series
+  if (series) {
+    const s = seriesStyle(series)
+    return (
+      <span
+        aria-label={s.label}
+        className="flex size-[34px] shrink-0 items-center justify-center rounded-lg font-display text-[13px] font-extrabold"
+        style={{ background: s.block, color: s.ink }}
+      >
+        {s.short}
+      </span>
+    )
+  }
+  const Icon = chat.status?.agent === "outlier" ? FlameIcon : chat.status?.agent === "researcher" ? BookOpenTextIcon : MessagesSquareIcon
+  return (
+    <span className="flex size-[34px] shrink-0 items-center justify-center rounded-lg bg-[#2a2d3a] text-foreground-warm">
+      <Icon className="size-4" />
+    </span>
   )
 }
 
@@ -298,10 +352,10 @@ function Message({
   if (message.role === "user") {
     return (
       <div className="flex flex-col items-end gap-1">
-        <div className="max-w-[85%] rounded-2xl rounded-br-sm bg-secondary px-4 py-2.5 text-sm whitespace-pre-wrap">
+        <div className="max-w-[80%] rounded-[18px] rounded-br-[4px] bg-foreground-warm px-[18px] py-3.5 text-[15.5px] leading-normal font-medium whitespace-pre-wrap text-background-creative">
           {message.content.split(/(@\w+)/).map((part, i) =>
             part.startsWith("@") ? (
-              <span key={i} className="font-mono text-brand">
+              <span key={i} className="font-mono font-semibold text-[#5b21b6]">
                 {part}
               </span>
             ) : (
@@ -310,7 +364,7 @@ function Message({
           )}
         </div>
         {meta.fast_path && (
-          <span className="flex items-center gap-1 text-[11px] text-muted-foreground" title="Parsed by the fast model; no Claude call">
+          <span className="flex items-center gap-1 text-[11.5px] text-subtle-foreground" title="Parsed by the fast model; no Claude call">
             <ZapIcon className="size-3" /> fast path · no Claude
           </span>
         )}
@@ -322,7 +376,7 @@ function Message({
   }
   if (meta.kind === "plan" && meta.plan_id) {
     const plan: PlanRecord | undefined = chat.plans[String(meta.plan_id)]
-    return plan ? <LivePlanCard plan={plan} /> : <p className="text-xs text-muted-foreground">{message.content}</p>
+    return plan ? <PlanCard plan={plan} variant="creative" /> : <p className="text-xs text-muted-foreground">{message.content}</p>
   }
   if (meta.kind === "result") return <ResultCard message={message} />
   if (message.role === "system") {
@@ -343,11 +397,8 @@ function Message({
   const streaming = Boolean(meta.streaming)
   const text = streaming ? (stream ?? "") : message.content
   return (
-    <div className="flex gap-3">
-      <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md bg-brand-muted">
-        <BotIcon className="size-3.5 text-brand" />
-      </div>
-      <div className="min-w-0 flex-1 overflow-x-auto text-sm leading-6 [&_a]:text-brand [&_a]:underline [&_hr]:my-3 [&_hr]:border-border [&_li]:ml-4 [&_ol]:list-decimal [&_p]:my-1.5 [&_strong]:font-semibold [&_table]:my-2 [&_table]:text-xs [&_td]:border-b [&_td]:px-2 [&_td]:py-1 [&_th]:border-b [&_th]:px-2 [&_th]:py-1 [&_th]:text-left [&_th]:font-medium [&_ul]:list-disc">
+    <div className="flex">
+      <div className="min-w-0 flex-1 overflow-x-auto text-[15.5px] leading-[1.6] text-[#d9d6ce] [&_a]:text-brand-soft [&_a]:underline [&_hr]:my-3 [&_hr]:border-border [&_li]:ml-4 [&_ol]:list-decimal [&_p]:my-1.5 [&_strong]:font-semibold [&_table]:my-2 [&_table]:text-xs [&_td]:border-b [&_td]:px-2 [&_td]:py-1 [&_th]:border-b [&_th]:px-2 [&_th]:py-1 [&_th]:text-left [&_th]:font-medium [&_ul]:list-disc">
         {text ? <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown> : null}
         {streaming && (
           <p className="flex items-center gap-2 text-xs text-muted-foreground">

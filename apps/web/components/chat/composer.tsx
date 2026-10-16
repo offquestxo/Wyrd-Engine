@@ -1,6 +1,6 @@
 "use client"
 
-import { ArrowUpIcon, Loader2Icon } from "lucide-react"
+import { Loader2Icon } from "lucide-react"
 import { useMemo, useRef, useState } from "react"
 import useSWR from "swr"
 
@@ -9,6 +9,8 @@ import { fetcher } from "@/lib/api"
 import { AGENT_INFO } from "@/lib/nav"
 import type { AgentSettings } from "@/lib/types"
 import { cn } from "@/lib/utils"
+
+const QUICK = ["scout", "outlier", "researcher"] as const
 
 /** Chat input with @-autocomplete for agents (descriptions from /api/agents).
  *  Enter sends, Shift+Enter adds a line. */
@@ -74,17 +76,21 @@ export function Composer({
               }}
               className={cn("flex w-full flex-col rounded-md px-2.5 py-1.5 text-left", i === active && "bg-accent")}
             >
-              <span className="font-mono text-sm text-brand">@{agent.name}</span>
+              <span className="font-mono text-sm text-brand-soft">@{agent.name}</span>
               <span className="text-xs text-muted-foreground">{agent.description}</span>
             </button>
           ))}
         </div>
       )}
-      <div className="flex items-end gap-2 rounded-xl border bg-card p-2 focus-within:border-brand/50">
+      <div className="flex flex-col gap-2.5 rounded-[18px] border border-white/10 bg-card-creative py-3 pr-3 pl-[18px] shadow-[0_0_0_4px_rgb(139_92_246/0.08)] focus-within:border-brand-soft/40">
+        <label htmlFor="chat-composer" className="sr-only">
+          Message
+        </label>
         <textarea
+          id="chat-composer"
           ref={ref}
           value={text}
-          rows={1}
+          rows={2}
           autoFocus={!!initial}
           onChange={(e) => {
             setText(e.target.value)
@@ -102,21 +108,34 @@ export function Composer({
               send()
             }
           }}
-          placeholder="Ask the orchestrator, or type @ to run an agent directly…"
-          className="max-h-40 min-h-9 flex-1 resize-none bg-transparent px-2 py-1.5 text-sm outline-none placeholder:text-muted-foreground field-sizing-content"
+          placeholder="Ask the orchestrator, or type @ to call an agent"
+          className="max-h-48 min-h-12 resize-none bg-transparent pt-1 text-[15.5px] leading-normal text-foreground-warm outline-none placeholder:text-subtle-foreground field-sizing-content"
         />
-        <Button
-          size="icon-sm"
-          onClick={send}
-          disabled={!text.trim() || busy || disabled}
-          aria-label="Send"
-          className="bg-brand text-brand-foreground hover:bg-brand/90"
-        >
-          {busy ? <Loader2Icon className="animate-spin" /> : <ArrowUpIcon />}
-        </Button>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {QUICK.map((name) => (
+            <button
+              key={name}
+              type="button"
+              onClick={() => {
+                setText((t) => `@${name} ${t.replace(/^@\w+\s*/, "")}`)
+                ref.current?.focus()
+              }}
+              className="h-9 rounded-[10px] border border-white/8 bg-[#1e212b] px-3 font-mono text-[12.5px] text-foreground-warm transition-colors hover:border-white/20"
+            >
+              @{name}
+            </button>
+          ))}
+          <Button
+            onClick={send}
+            disabled={!text.trim() || busy || disabled}
+            className="ml-auto h-11 rounded-xl bg-brand px-[18px] font-display text-[15px] font-extrabold text-brand-foreground hover:bg-brand/90"
+          >
+            {busy ? <Loader2Icon className="animate-spin" /> : null} Send →
+          </Button>
+        </div>
       </div>
-      <p className="mt-1.5 px-1 text-[11px] text-muted-foreground">
-        @mentions skip the orchestrator and go straight to a plan card (saves Claude usage).
+      <p className="mt-1.5 px-1 text-[11.5px] text-subtle-foreground">
+        @mentions skip the orchestrator and go straight to a plan card (no Claude usage). Enter sends, Shift+Enter adds a line.
       </p>
     </div>
   )
