@@ -600,3 +600,22 @@ The stored login stopped working on the Claude side (expired or revoked, and the
   - **Pipeline:** count per status, each linking to the board; Researching is cyan while non-zero.
   - **Top picks:** the 3 highest-scored Inbox stories, with the "Unverified lead" label on hooks, Shortlist, and Research this (disabled if a dossier exists).
 - **SSE:** `/api/events` now sends a comment as soon as a client connects. Before, `EventSource` only opened at the first keep-alive ping, so every page showed "connecting" for about 15 s.
+
+## Redesign stage 3: Chat (2026-10-16)
+
+- **Style:** creative, with A blocks inside the A shell. Background #0A0B10, warm text, Bricolage headings.
+- **Thread list:** each thread has a tile and a status line.
+  - **Tile:** the series colour and a two-letter code (`SeriesStyle.short`) when the thread is about a story; otherwise an icon (outlier, research, or chat).
+  - **Status line:** "Plan waiting" (violet), "@scout running" (cyan), "Dossier v2 · 18m", "@outlier done · 3h" or "failed/cancelled". The New chat button is cream.
+  - The data comes from `ChatService.list()` → `thread_status()`:
+    - The chat's newest plan is used, or a pending plan if there is one.
+    - The story for the tile is the researched story, or scout's top result.
+    - "Dossier vN" appears when that plan's run saved a dossier.
+- **Header:** Bricolage title, a series chip, and "orchestrator · session resumed/new session" next to the Claude meter chip.
+- **Messages:** the user bubble is cream (#F3F1EC) with dark text; @mentions are dark violet. Assistant text is plain warm grey (#D9D6CE) with no avatar tile.
+- **Plans** use `PlanCard` v2 (creative): big "01" step numbers, param chips, providers, units, "uses Claude", and ⌘⏎ to approve.
+- **Results:**
+  - The headline is short ("✓ @scout found 10 stories. Top 4:") with "Open in …"; the full summary shows underneath in small text when it's longer.
+  - Scout results are a row of `ThumbnailBlock sm`s linking to the stories (series colour; figure once stage 4 adds it).
+  - Other agents list their items.
+- **Composer:** rounded card, quick @scout/@outlier/@researcher buttons (they replace any leading mention), and a Bricolage "Send →". @-autocomplete and Enter/Shift+Enter work as before.

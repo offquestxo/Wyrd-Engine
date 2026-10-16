@@ -54,6 +54,12 @@ export interface Story {
   series: Series | null
   format: StoryFormat | null
   hook: string | null
+  /** Striking number for the thumbnail idea, taken only from the source text (stage 4). */
+  hook_figure?: string | null
+  /** ≤ 5-word caption under the figure. */
+  hook_caption?: string | null
+  /** True once a dossier's Key Numbers confirm the figure. */
+  hook_figure_verified?: boolean
   scores: (Partial<StoryScores> & { total?: number | null }) | null
   gap_score: number | null
   outlier_ref: number | null
@@ -336,6 +342,14 @@ export interface ChatSummary {
   busy: boolean
   message_count?: number
   preview?: string
+  /** Latest plan in a few words, for the thread list. */
+  status?: {
+    label: string
+    state: "waiting" | "running" | "done" | "failed" | "cancelled"
+    agent: string
+    series: string | null
+    at: string | null
+  } | null
 }
 
 export interface ChatDetail extends ChatSummary {

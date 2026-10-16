@@ -612,3 +612,44 @@ async def test_turn_fails_clearly_when_mcp_never_connects(monkeypatch: pytest.Mo
     assert isinstance(result, orchestrator.TurnResult) and not result.ok
     assert result.error and "MCP tools didn't connect" in result.error
     assert not any(getattr(e, "kind", None) == "text" for e in out)  # no made-up reply
+
+
+def test_thread_status_lines(engine: Any) -> None:
+    from apps.api.db.models import AgentRun, Chat, Dossier, Plan, PlanStep
+
+    with Session(engine) as s:
+        story = Story(slug="bre-x", title="Bre-X", series="Fraud Files")
+        chat = Chat(title="t")
+        s.add(story)
+        s.add(chat)
+        s.commit()
+        assert chat_mod.thread_status(s, chat.id or 0) is None  # no plans yet
+
+        run = AgentRun(agent="researcher", status="succeeded")
+        s.add(run)
+        s.commit()
+        done = Plan(chat_id=chat.id, status="done")
+        s.add(done)
+        s.commit()
+        s.add(
+            PlanStep(
+                plan_id=done.id or 0,
+                order=1,
+                agent="researcher",
+                params={"story_id": story.id},
+                status="succeeded",
+                run_id=run.id,
+            )
+        )
+        s.add(Dossier(story_id=story.id or 0, version=2, markdown="x", run_id=run.id))
+        s.commit()
+        status = chat_mod.thread_status(s, chat.id or 0)
+        assert status and status["label"] == "Dossier v2" and status["series"] == "Fraud Files"
+
+        waiting = Plan(chat_id=chat.id, status="pending")
+        s.add(waiting)
+        s.commit()
+        s.add(PlanStep(plan_id=waiting.id or 0, order=1, agent="scout", params={}))
+        s.commit()
+        status = chat_mod.thread_status(s, chat.id or 0)
+        assert status and status["label"] == "Plan waiting" and status["state"] == "waiting"
