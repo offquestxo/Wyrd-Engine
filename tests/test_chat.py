@@ -259,6 +259,17 @@ async def test_claude_unavailable_shows_error_without_calling(svc: Any) -> None:
     assert last["role"] == "system" and "claude auth login" in last["content"]
 
 
+async def test_unknown_claude_status_still_tries_claude(svc: Any) -> None:
+    service, _, claude, _, _ = svc
+    service.claude_status["value"] = ClaudeStatus(
+        installed=True, logged_in=False, state="unknown", detail="Couldn't tell."
+    )
+    chat = service.create()
+    await service.send(chat["id"], "hello")
+    await service.drain()
+    assert len(claude.calls) == 1
+
+
 # ---------------------------------------------------------------------------- results loop
 async def test_two_step_plan_results_flow_back_to_orchestrator(svc: Any) -> None:
     service, plans, claude, _, _ = svc

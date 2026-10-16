@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
+import os
 import shutil
 import time
 from collections.abc import AsyncIterator
@@ -77,7 +79,15 @@ async def cached_claude_status() -> ClaudeStatus:
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     engine = get_engine()  # creates / migrates data/wyrd.db
     state["claude"] = None
-    await cached_claude_status()
+    claude = await cached_claude_status()
+    # uvicorn's logger is the one that prints under `make dev`.
+    logging.getLogger("uvicorn.error").info(
+        "claude cli: %s · %s · state=%s · HOME=%s",
+        claude.path,
+        claude.version,
+        claude.state,
+        os.environ.get("HOME"),
+    )
     jobs_cfg = load_engine().jobs
     runner = JobRunner(
         engine,

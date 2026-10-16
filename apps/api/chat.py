@@ -371,12 +371,12 @@ class ChatService:
         """One orchestrator turn. Queued behind any turn already running in this chat."""
         async with self._lock(chat_id):
             status = await self.claude_ready()
-            if not (status.installed and status.logged_in):
+            if not status.usable:
                 self._add(
                     chat_id,
                     "system",
                     f"The orchestrator is unavailable: {status.detail}",
-                    {"kind": "error", "claude": False},
+                    {"kind": "error", "claude": False, "cli_output": status.output},
                 )
                 return
             with Session(self.engine) as s:

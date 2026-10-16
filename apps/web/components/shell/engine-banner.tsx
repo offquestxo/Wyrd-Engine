@@ -4,7 +4,9 @@ import { AlertTriangleIcon, PlugZapIcon } from "lucide-react"
 import useSWR from "swr"
 
 import { fetcher } from "@/lib/api"
-import type { ClaudeStatus } from "@/lib/types"
+import Link from "next/link"
+
+import { claudeUsable, type ClaudeStatus } from "@/lib/types"
 
 /** Top banner when the API is unreachable or the Claude CLI isn't ready (SPEC §10). */
 export function EngineBanner() {
@@ -20,10 +22,18 @@ export function EngineBanner() {
     )
   }
   const claude = data?.claude
-  if (claude && (!claude.installed || !claude.logged_in)) {
+  if (claude && !claudeUsable(claude)) {
     return (
       <Banner icon={AlertTriangleIcon} tone="warning">
         {claude.detail} Chat needs it for the orchestrator; @mentions still work without it.
+        {claude.output && (
+          <span className="ml-1 font-mono text-[11px] text-muted-foreground" title={claude.output}>
+            CLI said: {claude.output.replace(/\s+/g, " ").slice(0, 120)}
+          </span>
+        )}{" "}
+        <Link href="/settings?tab=agents" className="underline underline-offset-2">
+          Re-check
+        </Link>
       </Banner>
     )
   }
