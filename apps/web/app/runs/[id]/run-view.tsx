@@ -44,7 +44,8 @@ export function RunView({ id }: { id: number }) {
   const notFound = error instanceof ApiError && error.status === 404
 
   return (
-    <div className="mx-auto max-w-5xl px-8 py-8">
+    <div className="bg-grid min-h-full">
+    <div className="mx-auto max-w-5xl px-4 py-6 md:px-8 md:py-8">
       <Link href="/" className="mb-4 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
         <ArrowLeftIcon className="size-3" /> Home
       </Link>
@@ -76,7 +77,7 @@ export function RunView({ id }: { id: number }) {
                   <Field label="Progress">
                     <div className="flex items-center gap-2">
                       <div className="h-1 flex-1 overflow-hidden rounded-full bg-muted">
-                        <div className="h-full bg-brand transition-all" style={{ width: `${run.progress * 100}%` }} />
+                        <div className="h-full bg-live transition-all" style={{ width: `${run.progress * 100}%` }} />
                       </div>
                       <span className="font-mono text-xs">{Math.round(run.progress * 100)}%</span>
                     </div>
@@ -112,8 +113,8 @@ export function RunView({ id }: { id: number }) {
               <CardHeader className="flex flex-row items-center justify-between border-b px-4 py-3">
                 <CardTitle className="text-sm">Log</CardTitle>
                 {active && (
-                  <span className="flex items-center gap-1.5 text-[11px] text-brand">
-                    <span className="size-1.5 animate-pulse rounded-full bg-brand" /> live
+                  <span className="flex items-center gap-1.5 text-[11px] text-brand-soft">
+                    <span className="size-1.5 animate-pulse rounded-full bg-live" /> live
                   </span>
                 )}
               </CardHeader>
@@ -133,13 +134,14 @@ export function RunView({ id }: { id: number }) {
                     <span className="flex-1 break-words">{log.message}</span>
                   </div>
                 ))}
-                {active && <div className="h-4 w-2 animate-pulse bg-brand/70" />}
+                {active && <div className="h-4 w-2 animate-pulse bg-live/70" />}
                 <div ref={bottomRef} />
               </CardContent>
             </Card>
           </div>
         </>
       )}
+    </div>
     </div>
   )
 }

@@ -646,3 +646,20 @@ The stored login stopped working on the Claude side (expired or revoked, and the
     - Scores as A-style cream bars, plus gap score and sources (n primary).
     - Research this (or "Research again"), Move to… (all statuses), Open sources (expands the list).
     - Dossier versions, notes, and "Ask about it in Chat".
+
+## Redesign stage 5: Outliers, and the token pass on Research, Settings and run detail (2026-10-16)
+
+- **Outliers** (style A, grid):
+  - **Header:** a "last scan" eyebrow from the channels' `last_scanned_at`, and the @outlier launcher.
+  - **Summary tiles:** videos scanned (sum over channels), flagged outliers, biggest outlier, YouTube units today (of the daily limit).
+  - **Filters:** channel chips and a Both/Long-form/Shorts toggle.
+  - **Table:** three columns (video with channel · format underneath, views, outlier bar), so it fits beside the detail panel at 1440px with the live panel open.
+    - Outlier bars use a log scale so a single 30× video doesn't flatten every 4× bar; the exact multiple is shown next to each bar.
+  - **Side panel** for the selected row: thumbnail, "N× channel median · format", views vs. median, Gemini analysis (Unverified lead), "Create story from this" (or "Open its story"), and Open on YouTube.
+- **`PageHeader`** is now the style A header: optional mono eyebrow, a 32–34px title, a one-line description.
+  - Settings and run detail sit on the grid background.
+  - Research gets a sidebar-styled dossier list, the grid, an eyebrow and title, and 4 compact `StatTile`s: claims verified (and which model checked them), sources and primary sources, unresolved flags, versions.
+  - Settings › Providers & quotas starts with today's `MeterBar`s; disabled providers say so.
+- **Colour fixes:**
+  - **Violet text:** text uses `brand-soft` (#C4B5FD), not `brand`. #7C3AED is about 3.5:1 on dark cards, which fails 4.5:1, so it stays for fills (buttons) only.
+  - **Running status** (badge, Researching dot, run panel and run detail progress) is cyan, per rule 4. Violet is no longer used for status.

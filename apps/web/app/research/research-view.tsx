@@ -21,6 +21,7 @@ import { toast } from "sonner"
 import useSWR from "swr"
 
 import { EmptyState, ErrorState, LoadingState } from "@/components/common/states"
+import { StatTile } from "@/components/blocks/stat-tile"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -93,9 +94,12 @@ export function ResearchView() {
 
   return (
     <div className="flex h-full">
-      <aside className="hidden w-60 shrink-0 flex-col border-r md:flex">
-        <div className="flex h-14 items-center px-4 text-sm font-medium">Dossiers</div>
-        <div className="flex-1 space-y-0.5 overflow-y-auto px-2 pb-3">
+      <aside className="hidden w-64 shrink-0 flex-col border-r border-white/6 bg-sidebar md:flex">
+        <div className="flex items-center justify-between px-4 pt-5 pb-3">
+          <span className="text-[15px] font-semibold">Dossiers</span>
+          {list.data && <span className="num text-xs text-subtle-foreground">{list.data.length}</span>}
+        </div>
+        <div className="flex flex-1 flex-col gap-1 overflow-y-auto px-2.5 pb-3">
           {list.isLoading ? (
             <LoadingState rows={3} className="px-2" />
           ) : list.error ? (
@@ -108,8 +112,8 @@ export function ResearchView() {
                 key={d.story_id}
                 onClick={() => select(d.story_id)}
                 className={cn(
-                  "w-full rounded-md px-2.5 py-2 text-left hover:bg-muted",
-                  d.story_id === storyId && "bg-muted",
+                  "w-full rounded-[10px] px-2.5 py-2 text-left transition-colors hover:bg-white/4",
+                  d.story_id === storyId && "bg-sidebar-accent shadow-[inset_0_0_0_1px_rgb(167_139_250/0.3)]",
                 )}
               >
                 <p className="truncate text-sm">{d.story_title}</p>
@@ -128,7 +132,7 @@ export function ResearchView() {
         </div>
       </aside>
 
-      <div className="min-w-0 flex-1 overflow-y-auto">
+      <div className="bg-grid min-w-0 flex-1 overflow-y-auto">
         {list.isLoading || (storyId && detail.isLoading) ? (
           <div className="p-8">
             <LoadingState rows={10} />
@@ -159,6 +163,40 @@ export function ResearchView() {
         ) : (
           <div className="flex">
             <article className="min-w-0 flex-1 px-4 py-6 sm:px-8 sm:py-8">
+              <div className="mb-5 flex flex-col gap-1.5">
+                <span className="num text-[11.5px] tracking-[1.4px] text-subtle-foreground uppercase">
+                  Dossier · v{dossier.version} · {timeAgo(dossier.created_at)}
+                </span>
+                <h1 className="text-[32px] leading-tight font-semibold tracking-[-0.8px] md:text-[34px]">{dossier.story_title}</h1>
+              </div>
+              <div className="mb-5 grid max-w-3xl grid-cols-2 gap-3 md:grid-cols-4">
+                <StatTile
+                  label="Claims verified"
+                  value={`${dossier.excerpt_check.passed}/${dossier.excerpt_check.passed + dossier.excerpt_check.failed}`}
+                  delta={dossier.support_fallback ? "checked by fallback" : "support check: Groq"}
+                  deltaTone={dossier.support_fallback ? "warning" : "success"}
+                  compact
+                />
+                <StatTile
+                  label="Sources"
+                  value={dossier.source_count}
+                  delta={`${dossier.primary_count} primary`}
+                  compact
+                />
+                <StatTile
+                  label="Unresolved flags"
+                  value={dossier.unresolved_flags}
+                  delta={`${dossier.flags} second-opinion flags in all`}
+                  deltaTone={dossier.unresolved_flags > 0 ? "destructive" : "neutral"}
+                  compact
+                />
+                <StatTile
+                  label="Versions"
+                  value={dossier.versions.length}
+                  delta={`showing v${dossier.version}`}
+                  compact
+                />
+              </div>
               <div className="mb-6 flex flex-wrap items-center gap-2">
                 {/* Phones: pick the dossier here instead of the sidebar. */}
                 {list.data && list.data.length > 1 && (
@@ -230,7 +268,7 @@ export function ResearchView() {
               </div>
               <p className="mb-6 text-xs text-muted-foreground">
                 Story{" "}
-                <Link href={`/stories?story=${dossier.story_id}`} className="text-brand hover:underline">
+                <Link href={`/stories?story=${dossier.story_id}`} className="text-brand-soft hover:underline">
                   #{dossier.story_id}
                 </Link>{" "}
                 · {timeAgo(dossier.created_at)}
@@ -238,7 +276,7 @@ export function ResearchView() {
                   <>
                     {" "}
                     · from{" "}
-                    <Link href={`/runs/${dossier.run_id}`} className="text-brand hover:underline">
+                    <Link href={`/runs/${dossier.run_id}`} className="text-brand-soft hover:underline">
                       run #{dossier.run_id}
                     </Link>
                   </>
@@ -321,7 +359,7 @@ function SourceList({ sources }: { sources: DossierSource[] }) {
         <ol className="space-y-3">
           {sources.map((s) => (
             <li key={s.n} className="text-xs">
-              <a href={s.url} target="_blank" rel="noreferrer" className="group flex gap-2 hover:text-brand">
+              <a href={s.url} target="_blank" rel="noreferrer" className="group flex gap-2 hover:text-brand-soft">
                 <span className="font-mono text-muted-foreground">[{s.n}]</span>
                 <span className="min-w-0 flex-1 leading-5 break-words">
                   {s.title}

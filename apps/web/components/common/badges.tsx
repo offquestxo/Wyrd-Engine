@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils"
 const STORY_COLORS: Record<StoryStatus, string> = {
   Inbox: "bg-muted-foreground",
   Shortlisted: "bg-info",
-  Researching: "bg-brand",
+  Researching: "bg-live",
   Scripting: "bg-chart-2",
   "Fact-check": "bg-warning",
   Recording: "bg-chart-5",
@@ -26,7 +26,7 @@ export function StoryStatusBadge({ status }: { status: StoryStatus }) {
 
 const RUN_STYLES: Record<RunStatus, string> = {
   queued: "border-border text-muted-foreground",
-  running: "border-brand/40 bg-brand-muted text-brand",
+  running: "border-live/40 bg-live/10 text-live-text",
   succeeded: "border-success/30 text-success",
   failed: "border-destructive/40 text-destructive",
   cancelled: "border-border text-muted-foreground",
@@ -35,14 +35,14 @@ const RUN_STYLES: Record<RunStatus, string> = {
 export function RunStatusBadge({ status }: { status: RunStatus }) {
   return (
     <Badge variant="outline" className={cn("gap-1.5 font-mono text-[10px] uppercase", RUN_STYLES[status])}>
-      {status === "running" && <span className="size-1.5 animate-pulse rounded-full bg-brand" />}
+      {status === "running" && <span className="size-1.5 animate-pulse rounded-full bg-live" />}
       {status}
     </Badge>
   )
 }
 
 export function AgentTag({ agent }: { agent: string }) {
-  return <span className="font-mono text-xs text-brand">@{agent}</span>
+  return <span className="font-mono text-xs text-brand-soft">@{agent}</span>
 }
 
 export function ScoreBar({ value, max = 10 }: { value: number; max?: number }) {

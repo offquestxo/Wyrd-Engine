@@ -38,6 +38,7 @@ export function StatTile({
   delta,
   deltaTone = "neutral",
   loading = false,
+  compact = false,
   className,
 }: {
   label: string
@@ -47,16 +48,18 @@ export function StatTile({
   delta?: React.ReactNode
   deltaTone?: Tone
   loading?: boolean
+  /** Smaller number (28px) for tiles inside a page section rather than a KPI row. */
+  compact?: boolean
   className?: string
 }) {
   return (
-    <div className={cn("flex flex-col gap-2.5 rounded-xl border bg-card p-[18px]", className)}>
+    <div className={cn("flex flex-col gap-2.5 rounded-xl border bg-card", compact ? "p-4" : "p-[18px]", className)}>
       <span className="text-[13px] text-muted-foreground">{label}</span>
       <div className="flex items-end justify-between gap-2">
         {loading ? (
           <Skeleton className="h-9 w-16" />
         ) : (
-          <span className="num text-[36px] leading-none font-semibold tracking-[-1px]">
+          <span className={cn("num leading-none font-semibold tracking-[-1px]", compact ? "text-[28px]" : "text-[36px]")}>
             {value ?? "—"}
           </span>
         )}

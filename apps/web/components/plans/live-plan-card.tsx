@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils"
 const STEP_STYLE: Record<string, string> = {
   pending: "text-muted-foreground",
   queued: "text-muted-foreground",
-  running: "text-brand",
+  running: "text-brand-soft",
   succeeded: "text-success",
   failed: "text-destructive",
   cancelled: "text-muted-foreground",
@@ -69,7 +69,7 @@ export function LivePlanCard({ plan, onChange }: { plan: PlanRecord; onChange?: 
               )}
               <span className={cn("ml-auto font-mono text-[11px] uppercase", STEP_STYLE[step.status])}>{step.status}</span>
               {step.run_id && (
-                <Link href={`/runs/${step.run_id}`} className="font-mono text-[11px] text-brand hover:underline">
+                <Link href={`/runs/${step.run_id}`} className="font-mono text-[11px] text-brand-soft hover:underline">
                   run #{step.run_id} <ArrowRightIcon className="inline size-3" />
                 </Link>
               )}
