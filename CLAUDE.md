@@ -91,3 +91,9 @@ You are building and maintaining the wyrd.exe story engine: a local app that fin
   to "wyrd.exe Stories"; Status and Notes edited in Notion came back; app edits went out.
 - Claim-support checks by a fallback model are flagged on the dossier, with "Re-check with Groq".
 - **v1 is complete** (SPEC §11 Phases 0–7). Next: v2 roadmap (SPEC §13) when the owner says so.
+- 2026-10-16: Claude agent outage fixed (CLI was logged out; status check now tolerant, shows CLI output).
+  UI redesign (docs/design/HANDOFF.md) stages 1–5 done: tokens, shared blocks (`components/blocks/`),
+  sidebar + Home, creative Chat and Stories (thumbnail figures grounded in source text, ✓ when a dossier
+  confirms), Outliers, A pass on Research/Settings/run detail. Mistral disabled; OpenRouter long fallback.
+  Bre-X dossier v2 resolves its second-opinion flags. Demo walkthrough: docs/demo-script.md.
+  Not pushed yet (owner pushes after review).
