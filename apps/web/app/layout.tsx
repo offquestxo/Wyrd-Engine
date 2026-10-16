@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next"
-import { Geist, Geist_Mono } from "next/font/google"
+import { Bricolage_Grotesque, Geist, Geist_Mono } from "next/font/google"
 
 import { ProposeProvider } from "@/components/plans/propose-provider"
 import { AppShell } from "@/components/shell/app-shell"
@@ -11,6 +11,8 @@ import "./globals.css"
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] })
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] })
+// Creative pages only: headings on Chat/Stories and the figures inside thumbnail blocks.
+const bricolage = Bricolage_Grotesque({ variable: "--font-bricolage", subsets: ["latin"], weight: ["500", "700", "800"] })
 
 export const metadata: Metadata = {
   title: { default: "wyrd.exe", template: "%s · wyrd.exe" },
@@ -24,13 +26,13 @@ export const metadata: Metadata = {
 }
 
 export const viewport: Viewport = {
-  themeColor: "#0a0a0a",
+  themeColor: "#07080c",
   colorScheme: "dark",
 }
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`dark ${geistSans.variable} ${geistMono.variable}`}>
+    <html lang="en" className={`dark ${geistSans.variable} ${geistMono.variable} ${bricolage.variable}`}>
       <body className="antialiased">
         <TooltipProvider delayDuration={300}>
           <EventsProvider>
