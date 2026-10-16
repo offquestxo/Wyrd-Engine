@@ -35,7 +35,7 @@ from apps.api.db.models import Dossier, Story, StorySource, utcnow
 from apps.api.providers.base import ProviderError
 from apps.api.providers.schemas import SupportItem, SupportResult
 from apps.api.research.texts import cap_words, excerpt_in
-from apps.api.settings import RESEARCH_DIR
+from apps.api.settings import RESEARCH_DIR, ROOT
 from apps.api.sources._http import SourceError
 
 
@@ -815,7 +815,7 @@ async def save_dossier(
             data=cleaned.model_dump(),
             checks=summary,
             run_id=run_id,
-            export_path=str(folder / "dossier.md"),
+            export_path=_portable(folder / "dossier.md"),
         )
         s.add(dossier)
         known = {
@@ -929,7 +929,7 @@ def get_dossier(engine: Engine, story_id: int, version: int | None = None) -> di
             "sources": d.sources_json or [],
             "second_opinion": d.second_opinion,
             "checks": d.checks,
-            "export_path": d.export_path,
+            "export_path": resolve_export_path(d.export_path),
         }
 
 
@@ -985,6 +985,33 @@ async def rerun_second_opinion(
     result = get_dossier(engine, story_id, version)
     assert result is not None
     return result
+
+
+def _portable(path: Path) -> str:
+    """Store export paths relative to the repo when they're inside it, so moving the repo
+    folder doesn't break "Open exported file"."""
+    try:
+        return str(path.resolve().relative_to(ROOT))
+    except ValueError:
+        return str(path)
+
+
+def resolve_export_path(stored: str | None) -> str | None:
+    """Absolute path of an export: relative paths are under the repo; an absolute path from
+    an old repo location is mapped to research/… under the current one when that exists."""
+    if not stored:
+        return None
+    path = Path(stored)
+    if not path.is_absolute():
+        return str(ROOT / path)
+    if path.exists():
+        return str(path)
+    parts = path.parts
+    if "research" in parts:
+        moved = ROOT.joinpath(*parts[len(parts) - 1 - parts[::-1].index("research") :])
+        if moved.exists():
+            return str(moved)
+    return str(path)
 
 
 class RecheckUnavailable(RuntimeError):
