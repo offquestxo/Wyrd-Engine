@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>wyrd.exe · Stories</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0A0B10}
+a{color:#C4B5FD}a:hover{color:#EDE9FE}
+</style>
+</helmet>
+<div style="min-height: 1100px; background: #0A0B10; color: #F3F1EC; font-family: 'Geist', system-ui, sans-serif; display: flex; flex-wrap: wrap; align-items: stretch">
+
+  <!-- icon rail (A shell) -->
+  <nav aria-label="Main" style="flex: 0 0 64px; box-sizing: border-box; background: #0B0C12; border-right: 1px solid rgba(255,255,255,0.06); padding: 16px 10px; display: flex; flex-direction: column; align-items: center; gap: 6px">
+    <a href="Main.dc.html" aria-label="wyrd.exe home" style="width: 36px; height: 36px; margin-bottom: 10px; border-radius: 9px; background: #11131B; border: 1px solid rgba(167,139,250,0.45); box-shadow: 0 0 16px rgba(139,92,246,0.35); display: flex; align-items: center; justify-content: center; font-family: 'Geist Mono', monospace; font-size: 14px; font-weight: 600; color: #C4B5FD; text-decoration: none">w</a>
+    <a href="Main.dc.html" aria-label="Home" style="width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: #8C91A3"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1.5"></rect><rect x="14" y="3" width="7" height="5" rx="1.5"></rect><rect x="14" y="12" width="7" height="9" rx="1.5"></rect><rect x="3" y="16" width="7" height="5" rx="1.5"></rect></svg></a>
+    <a href="Chat.dc.html" aria-label="Chat" style="width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: #8C91A3"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12Z"></path></svg></a>
+    <a href="Stories.dc.html" aria-label="Stories" aria-current="page" style="width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: #EDE9FE; background: rgba(139,92,246,0.16); box-shadow: inset 0 0 0 1px rgba(167,139,250,0.35)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 9 5-9 5-9-5 9-5Z"></path><path d="m3 13 9 5 9-5"></path></svg></a>
+    <a href="#" aria-label="Research" style="width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: #8C91A3"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Z"></path><path d="M14 3v6h6M8 13h8M8 17h5"></path></svg></a>
+    <a href="Outliers.dc.html" aria-label="Outliers" style="width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: #8C91A3"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 17 6-6 4 4 8-8"></path><path d="M15 7h6v6"></path></svg></a>
+  </nav>
+
+  <main style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; padding: 28px 28px 36px; display: flex; flex-direction: column; gap: 20px">
+
+    <!-- header -->
+    <header style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 14px">
+      <div style="display: flex; flex-direction: column; gap: 6px">
+        <h1 style="margin: 0; font-family: 'Bricolage Grotesque', sans-serif; font-size: 38px; font-weight: 800; letter-spacing: -1.2px; line-height: 1">Stories</h1>
+        <p style="margin: 0; font-size: 14.5px; color: #A9A69E">57 stories · each card is a thumbnail idea built from the story's hook number</p>
+      </div>
+      <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center">
+        <div role="group" aria-label="View" style="display: flex; padding: 3px; border-radius: 12px; background: #15171F; border: 1px solid rgba(255,255,255,0.08)">
+          <button type="button" aria-pressed="false" style="height: 38px; padding: 0 14px; border-radius: 9px; background: transparent; color: #A9A69E; border: 0; font-family: inherit; font-size: 13.5px; cursor: pointer">Table</button>
+          <button type="button" aria-pressed="true" style="height: 38px; padding: 0 14px; border-radius: 9px; background: #F3F1EC; color: #0A0B10; border: 0; font-family: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer">Board</button>
+        </div>
+        <button type="button" style="display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 18px; border-radius: 12px; background: {{accent}}; border: 0; color: #FFFFFF; font-family: 'Bricolage Grotesque', sans-serif; font-size: 15px; font-weight: 800; cursor: pointer; box-shadow: 0 6px 22px rgba(124,58,237,0.4)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
+          Find stories
+        </button>
+      </div>
+    </header>
+
+    <!-- series filter: color = series -->
+    <div role="group" aria-label="Series" style="display: flex; flex-wrap: wrap; gap: 8px">
+      <button type="button" aria-pressed="true" style="height: 36px; padding: 0 14px; border-radius: 999px; background: #F3F1EC; color: #0A0B10; border: 0; font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer">All series</button>
+      <sc-for list="{{series}}" as="s" hint-placeholder-count="6">
+        <button type="button" aria-pressed="false" style="display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 14px; border-radius: 999px; background: #15171F; color: #E2DFD7; border: 1px solid rgba(255,255,255,0.08); font-family: inherit; font-size: 13px; cursor: pointer"><span style="width: 10px; height: 10px; border-radius: 3px; background: {{s.bg}}"></span>{{s.name}}</button>
+      </sc-for>
+    </div>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 18px; align-items: flex-start">
+
+      <!-- board -->
+      <section aria-label="Board" style="flex: 2 1 600px; min-width: 0; overflow-x: auto">
+        <div style="display: grid; grid-template-columns: repeat(4, minmax(220px, 1fr)); gap: 14px; min-width: 920px">
+          <sc-for list="{{cols}}" as="c" hint-placeholder-count="4">
+            <div style="display: flex; flex-direction: column; gap: 12px; padding: 12px; border-radius: 16px; background: #101219; border: 1px solid rgba(255,255,255,0.06)">
+              <div style="display: flex; align-items: center; gap: 8px; padding: 2px 4px">
+                <span style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 16px; font-weight: 800">{{c.name}}</span>
+                <span style="font-family: 'Geist Mono', monospace; font-size: 12px; color: #A9A69E; background: #1C1F29; border-radius: 999px; padding: 1px 8px">{{c.count}}</span>
+              </div>
+              <sc-for list="{{c.cards}}" as="k" hint-placeholder-count="3">
+                <article style="display: flex; flex-direction: column; gap: 10px; padding: 10px; border-radius: 14px; background: #15171F; border: {{k.border}}; box-shadow: {{k.glow}}">
+                  <div style="aspect-ratio: 16 / 9; border-radius: 10px; background: {{k.bg}}; color: {{k.fg}}; padding: 10px 12px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: flex-end; gap: 2px">
+                    <span style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 32px; font-weight: 800; line-height: 0.95; letter-spacing: -1.2px">{{k.num}}</span>
+                    <span style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.2px">{{k.cap}}</span>
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 8px; padding: 0 2px">
+                    <span style="font-size: 15px; font-weight: 600">{{k.name}}</span>
+                    <span style="margin-left: auto; font-family: 'Geist Mono', monospace; font-size: 13.5px; font-weight: 600">{{k.score}}</span>
+                  </div>
+                  <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 0 2px; font-size: 12px; color: #A9A69E">
+                    <span>{{k.series}}</span><span>·</span><span>{{k.format}}</span>
+                    <sc-if value="{{k.progress}}" hint-placeholder-val="{{ false }}">
+                      <span style="flex-basis: 100%; display: flex; align-items: center; gap: 8px; margin-top: 4px"><span style="flex: 1; height: 5px; border-radius: 5px; background: #262a36; overflow: hidden"><span style="display: block; width: {{k.progress}}; height: 100%; background: #22D3EE"></span></span><span style="font-family: 'Geist Mono', monospace; color: #67E8F9">researching</span></span>
+                    </sc-if>
+                  </div>
+                </article>
+              </sc-for>
+            </div>
+          </sc-for>
+        </div>
+      </section>
+
+      <!-- detail drawer -->
+      <aside aria-label="Circuit City" style="flex: 1 1 320px; min-width: 0; border-radius: 20px; background: #15171F; border: 1px solid rgba(167,139,250,0.4); box-shadow: 0 0 36px rgba(139,92,246,0.14); padding: 18px; display: flex; flex-direction: column; gap: 16px">
+        <div style="aspect-ratio: 16 / 9; border-radius: 14px; background: #3D7BFF; color: #050B1A; padding: 16px 18px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between">
+          <span style="font-family: 'Geist Mono', monospace; font-size: 11px; font-weight: 600; letter-spacing: 1px">THUMBNAIL CONCEPT</span>
+          <span style="display: flex; flex-direction: column; gap: 4px"><span style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 52px; font-weight: 800; line-height: 0.9; letter-spacing: -2px">3,400</span><span style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 14px; font-weight: 800; text-transform: uppercase">best salespeople, fired</span></span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <div style="display: flex; align-items: center; gap: 10px"><h2 style="margin: 0; font-family: 'Bricolage Grotesque', sans-serif; font-size: 26px; font-weight: 800; letter-spacing: -0.6px">Circuit City</h2><span style="margin-left: auto; font-family: 'Geist Mono', monospace; font-size: 22px; font-weight: 600">8.7</span></div>
+          <p style="margin: 0; font-size: 14.5px; line-height: 1.5; color: #D9D6CE">Fired 3,400 of its best-paid salespeople to cut costs. Bankrupt within two years.</p>
+          <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px">
+            <span style="padding: 4px 10px; border-radius: 999px; background: rgba(61,123,255,0.16); color: #A9C4FF; font-size: 12.5px">Tech Graveyard</span>
+            <span style="padding: 4px 10px; border-radius: 999px; background: #1E212B; color: #D9D6CE; font-size: 12.5px">Long-form</span>
+            <span style="padding: 4px 10px; border-radius: 999px; background: #1E212B; color: #D9D6CE; font-size: 12.5px">Shortlisted</span>
+          </div>
+        </div>
+
+        <!-- scores: data, A-style bars -->
+        <div style="display: flex; flex-direction: column; gap: 9px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.07)">
+          <span style="font-family: 'Geist Mono', monospace; font-size: 11.5px; letter-spacing: 0.8px; color: #A9A69E">SCORES</span>
+          <sc-for list="{{scores}}" as="r" hint-placeholder-count="6">
+            <div style="display: flex; align-items: center; gap: 10px; font-size: 13px">
+              <span style="width: 96px; color: #D9D6CE">{{r.k}}</span>
+              <span style="flex: 1; height: 6px; border-radius: 6px; background: #262a36; overflow: hidden"><span style="display: block; width: {{r.w}}; height: 100%; background: #F3F1EC"></span></span>
+              <span style="width: 18px; text-align: right; font-family: 'Geist Mono', monospace">{{r.v}}</span>
+            </div>
+          </sc-for>
+          <div style="display: flex; gap: 18px; margin-top: 6px; font-size: 13px; color: #A9A69E"><span>Gap score <b style="color: #F3F1EC; font-family: 'Geist Mono', monospace">7.2</b></span><span>Sources <b style="color: #F3F1EC; font-family: 'Geist Mono', monospace">14</b> (3 primary)</span></div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 8px">
+          <button type="button" style="height: 46px; border-radius: 12px; background: {{accent}}; border: 0; color: #FFFFFF; font-family: 'Bricolage Grotesque', sans-serif; font-size: 16px; font-weight: 800; cursor: pointer">Research this</button>
+          <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+            <button type="button" style="height: 44px; border-radius: 12px; background: transparent; border: 1px solid rgba(255,255,255,0.16); color: #F3F1EC; font-family: inherit; font-size: 14px; cursor: pointer">Move to…</button>
+            <button type="button" style="height: 44px; border-radius: 12px; background: transparent; border: 1px solid rgba(255,255,255,0.16); color: #F3F1EC; font-family: inherit; font-size: 14px; cursor: pointer">Open sources</button>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#7C3AED","options":["#7C3AED","#2563EB","#DB2777","#0E7490"]},"$preview":{"width":1440,"height":1100}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const S = {
+      'Fraud Files': { bg: '#FF5A36', fg: '#1A0803' },
+      'Tech Graveyard': { bg: '#3D7BFF', fg: '#050B1A' },
+      'Childhood Brands': { bg: '#FFD23F', fg: '#1A1403' },
+      'Comebacks': { bg: '#2EE6A8', fg: '#03140E' },
+      'Everyday Genius': { bg: '#B9A4FF', fg: '#120A2A' },
+      'Recent Collapses': { bg: '#F3F1EC', fg: '#0A0B10' }
+    };
+    const series = Object.keys(S).map((name) => ({ name, bg: S[name].bg }));
+    const card = (name, series, num, cap, score, format, opts) => {
+      const o = opts || {};
+      return {
+        name, series, num, cap, score, format,
+        bg: S[series].bg, fg: S[series].fg,
+        progress: o.progress || false,
+        border: o.selected ? '1px solid rgba(167,139,250,0.7)' : '1px solid rgba(255,255,255,0.06)',
+        glow: o.selected ? '0 0 0 3px rgba(139,92,246,0.2)' : 'none'
+      };
+    };
+    const cols = [
+      { name: 'Inbox', count: 42, cards: [
+        card('Wirecard', 'Fraud Files', '€1.9B', 'that never existed', '9.1', 'Long'),
+        card('Quibi', 'Tech Graveyard', '$1.75B', 'gone in six months', '8.2', 'Short'),
+        card('Toys “R” Us', 'Childhood Brands', '$5B', 'of buyout debt', '8.0', 'Long')
+      ] },
+      { name: 'Shortlisted', count: 9, cards: [
+        card('Circuit City', 'Tech Graveyard', '3,400', 'best salespeople, fired', '8.7', 'Long', { selected: true }),
+        card('Theranos', 'Fraud Files', '$9B', 'built on one blood test', '7.9', 'Long')
+      ] },
+      { name: 'Researching', count: 3, cards: [
+        card('Blockbuster', 'Childhood Brands', '$50M', 'the deal it said no to', '8.4', 'Long', { progress: '70%' }),
+        card('Enron', 'Fraud Files', '$63B', 'in assets, then bankrupt', '8.5', 'Long', { progress: '35%' })
+      ] },
+      { name: 'Scripting', count: 2, cards: [
+        card('Marvel', 'Comebacks', '$4B', 'after going bankrupt', '8.6', 'Long')
+      ] }
+    ];
+    const scores = [['Drama', 9], ['Twist', 9], ['Relatability', 8], ['Visuals', 7], ['Hook number', 9], ['Freshness', 8]]
+      .map(([k, v]) => ({ k, v, w: v * 10 + '%' }));
+    return { accent: this.props.accent ?? '#7C3AED', series, cols, scores };
+  }
+}
+</script>
+</body>
+</html>

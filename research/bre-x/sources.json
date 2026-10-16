@@ -1,0 +1,29 @@
+[
+  {
+    "n": 1,
+    "url": "https://en.wikipedia.org/wiki/Bre-X",
+    "title": "Bre-X — Wikipedia",
+    "kind": "encyclopedia article",
+    "source_type": "secondary",
+    "claims_checked": 17,
+    "claims_verified": 17
+  },
+  {
+    "n": 2,
+    "url": "https://en.wikipedia.org/wiki/David_Walsh_%28mining%29",
+    "title": "David Walsh (mining) — Wikipedia",
+    "kind": "encyclopedia article",
+    "source_type": "secondary",
+    "claims_checked": 2,
+    "claims_verified": 2
+  },
+  {
+    "n": 3,
+    "url": "https://en.wikipedia.org/wiki/Michael_de_Guzman",
+    "title": "Michael de Guzman — Wikipedia",
+    "kind": "encyclopedia article",
+    "source_type": "secondary",
+    "claims_checked": 3,
+    "claims_verified": 3
+  }
+]
