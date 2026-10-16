@@ -26,10 +26,14 @@ Then open `.env` and add your keys (see below). `.env` and `data/` are git-ignor
 ```bash
 make check-providers   # tests each API key (Groq, Gemini, NVIDIA, YouTube)
 make check-models      # checks configured model IDs against each provider's live list
-make dev               # API on http://127.0.0.1:8000, web on http://127.0.0.1:3000
+make dev               # API on http://127.0.0.1:8000, web on http://127.0.0.1:3000 (prints the URL)
+make dev WEB_PORT=3005 # require a specific web port (API_PORT works the same way)
 make test              # lint + type check + offline tests (Python and web)
 make test-live         # hits the real APIs with Circuit City as the test company
 ```
+
+If another app already uses port 3000, `make dev` starts the web app on the next free port
+and prints the address. Set `WEB_PORT` to require a specific port.
 
 ## API keys
 

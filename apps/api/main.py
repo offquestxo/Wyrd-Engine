@@ -129,7 +129,9 @@ for _group, _mcp_app in mcp_apps.items():
     app.mount(mcp_server.MOUNTS[_group], mcp_server.TokenGuard(_mcp_app))
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://127.0.0.1:3000", "http://localhost:3000"],
+    # Any local port: the web app may run on another port (make dev WEB_PORT=…). The API
+    # itself only listens on 127.0.0.1, and the browser normally uses Next's same-origin proxy.
+    allow_origin_regex=r"http://(127\.0\.0\.1|localhost)(:\d+)?",
     allow_methods=["*"],
     allow_headers=["*"],
 )
