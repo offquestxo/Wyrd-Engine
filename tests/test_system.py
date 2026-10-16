@@ -9,14 +9,15 @@ import pytest
 from apps.api import system
 from apps.api.system import ClaudeStatus, check_claude_cli, parse_auth_status, redact
 
-# Logged-out output captured from Claude Code 2.1.196 (`claude auth status --json`), 2026-10-16.
-# The logged-in sample has the same keys; extra fields (email etc.) vary by account.
+# Captured from Claude Code 2.1.196 (`claude auth status --json`), 2026-10-16. The logged-in
+# sample has the real key set; the account values are placeholders.
 LOGGED_OUT_2_1 = (
     '{\n  "loggedIn": false,\n  "authMethod": "none",\n  "apiProvider": "firstParty"\n}'
 )
 LOGGED_IN_2_1 = (
     '{\n  "loggedIn": true,\n  "authMethod": "claude.ai",\n  "apiProvider": "firstParty",\n'
-    '  "email": "owner@example.com",\n  "subscriptionType": "pro"\n}'
+    '  "email": "owner@example.com",\n  "orgId": "00000000-1111-2222-3333-444444444444",\n'
+    '  "orgName": "Owner Org",\n  "subscriptionType": "pro"\n}'
 )
 
 
@@ -55,6 +56,7 @@ def test_plain_text_status() -> None:
 def test_redact_hides_emails_and_tokens() -> None:
     out = redact(LOGGED_IN_2_1 + "\nsk-ant-oat01-abcdefghijklmnop " + "x" * 40)
     assert "owner@example.com" not in out and "sk-ant" not in out and "x" * 40 not in out
+    assert "00000000-1111-2222-3333-444444444444" not in out  # orgId
     assert '"loggedIn": true' in out
     assert len(redact("a " * 500)) <= system.MAX_OUTPUT + 2
 
