@@ -883,3 +883,21 @@ def test_unresolved_flags_counts_medium_and_high_only() -> None:
     assert dmod.unresolved_flags({"flags": flags, "resolutions": [{}, {}]}) == 1
     assert dmod.unresolved_flags({"flags": flags, "resolutions": [{}] * 5}) == 0
     assert dmod.unresolved_flags(None) == 0
+
+
+def test_export_paths_survive_moving_the_repo(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "new-home" / "wyrd-engine"
+    (root / "research" / "bre-x").mkdir(parents=True)
+    (root / "research" / "bre-x" / "dossier.md").write_text("x")
+    monkeypatch.setattr(dmod, "ROOT", root)
+    moved = dmod.resolve_export_path(
+        "/Users/someone/old-place/wyrd-engine/research/bre-x/dossier.md"
+    )
+    assert moved == str(root / "research" / "bre-x" / "dossier.md")
+    assert dmod.resolve_export_path("research/bre-x/dossier.md") == str(
+        root / "research/bre-x/dossier.md"
+    )
+    assert dmod._portable(root / "research" / "bre-x" / "dossier.md") == "research/bre-x/dossier.md"
+    assert dmod.resolve_export_path(None) is None
