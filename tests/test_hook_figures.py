@@ -111,3 +111,15 @@ def test_ground_drops_trivial_digits_and_echo_captions() -> None:
     assert hf.ground("1", "piece of advice", text) == (None, None)
     assert hf.ground("$15 million", "lost $15 million", text) == ("$15 million", None)
     assert hf.ground("40,000", "investors lost everything", text)[1] == "investors lost everything"
+
+
+@pytest.mark.parametrize("figure", ["1971", "in 1989", "1990s"])
+def test_ground_drops_years(figure: str) -> None:
+    assert hf.ground(figure, "founded", f"Founded {figure}; 84,300 employees") == (None, None)
+    assert hf.ground("84,300", "employees", f"Founded {figure}; 84,300 employees")[0] == "84,300"
+
+
+def test_title_exists_is_case_insensitive(engine: Any) -> None:
+    stories.create_story(engine, stories.StoryIn(title="Blockbuster (retailer)"), added_by="test")
+    assert stories.title_exists(engine, "blockbuster (retailer) ")
+    assert not stories.title_exists(engine, "Borders (retailer)")

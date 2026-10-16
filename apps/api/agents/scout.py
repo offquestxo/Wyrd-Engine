@@ -49,6 +49,7 @@ from apps.api.stories import (
     create_story,
     known_source_urls,
     known_titles,
+    title_exists,
     total_score,
 )
 from apps.api.usage_report import youtube_used_today
@@ -154,6 +155,12 @@ async def run_news(
     out = []
     for lead in ranked:
         assert lead.score is not None
+        if title_exists(engine, clean_title(lead.item.title)):
+            # Another run saved it while this one was scoring (runs can overlap).
+            ctx.log(
+                "info", f"Skipped “{clean_title(lead.item.title)}”: already saved by another run"
+            )
+            continue
         story = create_story(
             engine,
             StoryIn(
@@ -684,6 +691,9 @@ async def run_evergreen(
     out = []
     for c in ranked:
         assert c.score is not None
+        if title_exists(engine, c.title):
+            ctx.log("info", f"Skipped “{c.title}”: already saved by another run")
+            continue
         note = (
             f"Found by @scout gap finder (run #{ctx.run_id}). Wikipedia: {c.references} refs, "
             f"{c.length:,} bytes, {c.pageviews:,} views/{days}d. YouTube: {c.popular_videos} "
