@@ -29,7 +29,10 @@ def main() -> None:
                 print(f"Port {preferred} is in use by another app; using {port}.", file=sys.stderr)
             print(port)
             return
-    print(f"Port {preferred} is in use. Pick another, e.g. make dev WEB_PORT={preferred + 1}", file=sys.stderr)
+    print(
+        f"Port {preferred} is in use. Pick another, e.g. make dev WEB_PORT={preferred + 1}",
+        file=sys.stderr,
+    )
     sys.exit(1)
 
 
