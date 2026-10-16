@@ -495,3 +495,11 @@ The stored login stopped working on the Claude side (expired or revoked, and the
 `tests/test_chat.py` checks that an `unknown` status still calls Claude.
 
 **Dev:** `.claude/launch.json` gains an `api` entry (`make api`) so the API can be started from the preview tools.
+
+**Live verification after `claude auth login` (2026-10-16):**
+- **Settings › Claude:** Re-check showed **ready · 2.1.196 (Claude Code)**, and the banner cleared.
+- **Orchestrator:** a plain chat message ("Find 5 new Fraud Files story ideas from recent news.", chat #6) got a reply in 4.6 s, and its `propose_plan` call produced plan card #14 (@scout news, limit 5). The plan was left pending, not run.
+- **@researcher:** `@researcher Bre-X, quick depth` → plan #15 approved → run #12 succeeded in 9 m 38 s, 14/20 Claude turns. It saved `research/bre-x/dossier.md` v1 with 22/22 excerpts verified. The support check ran on Groq (primary, not a fallback): 5 trimmed, 0 moved.
+- **Seen during the run, not part of this fix:**
+  - NVIDIA timed out three times, so the second opinion was unavailable (the save goes ahead, as designed).
+  - One `extract_from_document` call failed on every provider (NVIDIA returned invalid JSON). Claude retried with another page.
