@@ -521,3 +521,10 @@ def test_openrouter_long_context_fallback() -> None:
     for task in ("extract_from_document", "extract_from_document_deep", "analyze_outliers"):
         assert config.tasks[task][-1].provider == "openrouter"
         assert config.tasks[task][-1].model == "long"
+
+
+def test_plan_steps_leave_out_disabled_providers() -> None:
+    from apps.api.plans import step_providers
+
+    providers = step_providers("researcher")
+    assert "mistral" not in providers and "nvidia" in providers and providers[-1] == "claude"
