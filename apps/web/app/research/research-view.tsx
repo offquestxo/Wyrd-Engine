@@ -115,7 +115,11 @@ export function ResearchView() {
                 <p className="truncate text-sm">{d.story_title}</p>
                 <p className="font-mono text-[11px] text-muted-foreground">
                   v{d.version} · {timeAgo(d.created_at)} · {d.excerpt_check.passed} verified
-                  {d.flags > 0 && <span className="text-warning"> · {d.flags} flags</span>}
+                  {d.unresolved_flags > 0 ? (
+                    <span className="text-destructive-text"> · {d.unresolved_flags} unresolved</span>
+                  ) : (
+                    d.flags > 0 && <span className="text-subtle-foreground"> · {d.flags} flags, resolved</span>
+                  )}
                   {d.support_fallback && <span className="text-warning"> · fallback check</span>}
                 </p>
               </button>
@@ -187,8 +191,17 @@ export function ResearchView() {
                   <ShieldCheckIcon className="size-3" /> {dossier.excerpt_check.passed} verified
                   {dossier.excerpt_check.failed > 0 && ` · ${dossier.excerpt_check.failed} unverified`}
                 </Badge>
+                {dossier.unresolved_flags > 0 && (
+                  <Badge
+                    variant="outline"
+                    className="gap-1 border-destructive/40 text-destructive-text"
+                    title="Saved with medium/high second-opinion flags that have no recorded resolution. Fix them in a new version before scripting."
+                  >
+                    <FlagIcon className="size-3" /> {dossier.unresolved_flags} unresolved flags
+                  </Badge>
+                )}
                 {dossier.flags > 0 && (
-                  <Badge variant="outline" className="gap-1 border-warning/40 text-warning">
+                  <Badge variant="outline" className="gap-1 text-subtle-foreground" title="All second-opinion flags, including low-severity notes">
                     <FlagIcon className="size-3" /> {dossier.flags} second-opinion flags
                   </Badge>
                 )}
