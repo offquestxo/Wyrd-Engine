@@ -5,7 +5,7 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
- * wyrd.exe theme — dark only (docs/design/HANDOFF.md, Part 2).
+ * wyrd.exe theme — dark only.
  * Style A (data pages: Home, Outliers, Research, Settings, runs): calm, dark, precise.
  * Creative pages (Chat, Stories) use the same shell with `.surface-creative` and series colour blocks.
  * One brand accent: change it by editing --brand / --brand-soft below.

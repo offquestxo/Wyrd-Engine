@@ -466,7 +466,7 @@ The stored login stopped working on the Claude side (expired or revoked, and the
 
 **Ruled out:**
 - **A CLI update changed the status format.** The binary (`/opt/homebrew/bin/claude` → npm `@anthropic-ai/claude-code`, 2.1.196) hasn't changed since 2026-06-30, and `auth status --json` still prints `loggedIn`/`authMethod`.
-- **A different environment under `make dev`.** The API process logs `claude cli: /opt/homebrew/bin/claude · 2.1.196 · state=logged_out · HOME=/Users/rei`, which matches a clean `env -i` shell and an unsandboxed one. There is only one install and no `CLAUDE_CONFIG_DIR`.
+- **A different environment under `make dev`.** The API process logs `claude cli: /opt/homebrew/bin/claude · 2.1.196 · state=logged_out · HOME=/Users/<me>`, which matches a clean `env -i` shell and an unsandboxed one. There is only one install and no `CLAUDE_CONFIG_DIR`.
 - **Keychain access denied.** Every environment I tried reported the same logged-out state, and the keychain item itself is readable.
 
 **Fix:** `claude auth login` (owner). The engine changes below make the next failure explain itself.

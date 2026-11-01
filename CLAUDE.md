@@ -54,46 +54,4 @@ You are building and maintaining the wyrd.exe story engine: a local app that fin
 
 ## Current status
 
-- Phase 0 (foundation): **done**, pushed to github.com/offquestxo/Wyrd-Engine (private).
-  Config, SQLite schema + FTS5, provider router (retries, fallback, JSON repair, usage
-  logging, auth-failure cooldown), 12 source CLIs, FastAPI health/key-status endpoints.
-- Provider status (2026-10-05): all six connected. Groq ✅ (primary: scoring/parsing), Gemini ✅ via
-  OAuth/ADC (`GEMINI_AUTH=oauth`; primary: extraction/outliers; embed fallback), Mistral ⚠️ (key valid but
-  workspace quota is 0 req/min — blocked; first fallback for extraction/outliers once fixed), NVIDIA ✅ (embed/second-opinion primary), OpenRouter ✅, YouTube ✅.
-  Gemini API keys (`AQ.`) are rejected; OAuth login expires ~weekly in Testing mode (README).
-- Notion connector authorized in the owner's Claude account — for Phase 7 database setup only; the
-  app's sync uses NOTION_TOKEN/NOTION_DATABASE_ID (docs/decisions.md).
-- Phase 1 (UI shell): **done**. All pages plus Settings (real data), command palette, live panel over
-  SSE, PWA. (Sample data was replaced phase by phase; none is left since Phase 6.)
-- Phase 2 (jobs, runs, dashboard): **done**, reviewed. Plans → approved runs (`plans.py`),
-  DB-backed runner with cancellation (`jobs.py`), live logs over SSE, run detail, real quota meters
-  (`/api/usage`), `@demo` test agent. Home, run detail, and live panel use real data.
-- Phase 3 (@scout): **done**, reviewed and pushed. News + evergreen gap finder (`agents/scout.py`), dedup
-  (`agents/dedup.py`), stories repository + API (`stories.py`), real Stories page (table/board/drawer),
-  Run @scout form → plan card with YouTube estimate. Verified live (news: 10 stories; gap finder:
-  20 search calls / 40 units). Mistral account has 0 req/min quota → blocked until the owner fixes it.
-- Parallel scoring across providers (75 items in 47 s), pre-filter, unverified-lead badges, v2 roadmap
-  in SPEC §13 — done.
-- Phase 4 (@outlier): **done**, reviewed and pushed. 3 seed channels scanned live (12 outliers, all analysed;
-  9 + 7 units, matching estimates). Company Man handle corrected to @companyman114.
-- Phase 5 (orchestrator + chat): **done**, reviewed and pushed (372eb89). MCP server at `/mcp` (FastMCP,
-  token-guarded), `claude -p` stream-json turns with one resumed session per chat and an MCP-only
-  allowlist, @mention fast path (no Claude), plan + result cards, results fed back to the orchestrator,
-  hybrid memory search, Claude meter with soft cap. Browser calls the API through Next's `/api` proxy.
-- Phase 6 (@researcher): **done**, reviewed and pushed. Headless Claude researcher (`agents/researcher.py`,
-  `.claude/agents/researcher.md`) with per-depth turn budgets, researcher MCP tools at `/mcp-research`
-  (source_* per module, extract_from_document, second_opinion, save_dossier), structured dossiers with
-  excerpt, figure, claim-support (Groq 120B → NVIDIA), prose-number and duration checks; interpretation flags
-  must be resolved before saving. Circuit City dossier v2: 41/41 claims verified (v1 in history).
-- Phase 7 (Notion sync): **done**, reviewed and pushed. `notion_sync.py` (Notion-Version 2026-03-11,
-  data sources, ≤ 3 req/s with Retry-After backoff): push 9 fields + Notes + Engine ID, pull Status/Notes
-  with value-based change detection (newest wins), auto-sync toggle, Settings card. Live: 25 stories pushed
-  to "wyrd.exe Stories"; Status and Notes edited in Notion came back; app edits went out.
-- Claim-support checks by a fallback model are flagged on the dossier, with "Re-check with Groq".
-- **v1 is complete** (SPEC §11 Phases 0–7). Next: v2 roadmap (SPEC §13) when the owner says so.
-- 2026-10-16: Claude agent outage fixed (CLI was logged out; status check now tolerant, shows CLI output).
-  UI redesign (docs/design/HANDOFF.md) stages 1–5 done: tokens, shared blocks (`components/blocks/`),
-  sidebar + Home, creative Chat and Stories (thumbnail figures grounded in source text, ✓ when a dossier
-  confirms), Outliers, A pass on Research/Settings/run detail. Mistral disabled; OpenRouter long fallback.
-  Bre-X dossier v2 resolves its second-opinion flags. Demo walkthrough: docs/demo-script.md.
-  Pushed (3a7290a).
+v1 is complete (SPEC.md §11, Phases 0–7). Mistral is disabled in `config/providers.yaml`; OpenRouter is the long-context last resort. Decisions and their reasons are in `docs/decisions.md`. Next: the v2 roadmap (SPEC.md §13), when the owner says so.

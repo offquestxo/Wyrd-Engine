@@ -1,4 +1,4 @@
-// The one place series colours live (docs/design/HANDOFF.md, Part 2 rule 3):
+// The one place series colours live.
 // colour blocks mean series, nothing else, never status or buttons.
 import { SERIES, type Series } from "@/lib/types"
 

@@ -1,158 +1,125 @@
-# Wyrd-Engine
+# Wyrd Engine
 
-The story engine for **wyrd.exe**: it finds, reads, and researches true business stories, with a local dashboard of all agents and their tasks run by an orchestrator. Runs entirely on your computer.
+I run a faceless YouTube channel called **wyrd.exe** that tells true business stories (collapses, frauds, comebacks) like thrillers. The slowest part of making a video was never the editing. It was finding a good story and then reading enough 10-Ks, court filings and old news to tell it accurately.
 
-`SPEC.md` is the source of truth for what gets built; `CLAUDE.md` holds the working rules.
+So I built a research assistant for myself. Wyrd Engine runs on my laptop and does three jobs:
 
-**Status:** Phases 0–3 are complete: foundation, UI shell, the job system (plans → approved runs with live logs, cancellation, real quota meters), and **@scout** (news + evergreen gap finder, dedup, scoring) with a fully working Stories page. Chat, Research, and Outliers show sample data (marked **SAMPLE DATA**) until Phases 4–6. Start a scout run with **Run @scout** on the Stories page or ⌘K.
+- **@scout** finds story ideas in news feeds and Wikipedia, and scores them.
+- **@outlier** looks at competitor channels and flags the videos that did far better than usual, so I can see which topics work.
+- **@researcher** writes a sourced research dossier on a story. Every date and number links to a source with a short exact quote.
 
-## Requirements
+I talk to it through a chat page. An orchestrator (Claude, through the Claude Code CLI) works out which agents to run and proposes a plan. Nothing runs until I approve it.
 
-- macOS or Linux
-- [uv](https://docs.astral.sh/uv/) (installs Python 3.12 for the project automatically)
-- Node.js 20+ and [pnpm](https://pnpm.io/installation)
-- [Claude Code](https://claude.com/claude-code) CLI, logged in (`claude auth login`). This is used by the orchestrator and @researcher from Phase 5.
+## How it's built
 
-## Setup
+- **Backend:** Python, FastAPI, SQLite (with full-text search), and a small job queue that runs inside the API process. Live logs reach the browser over server-sent events.
+- **Frontend:** Next.js, TypeScript, Tailwind and shadcn/ui. It can be installed as a desktop app from Chrome.
+- **Models:** Claude is the planner and does the research writing. Everything high-volume goes to free tiers: Groq, Gemini, NVIDIA and OpenRouter.
+
+The part I'm proudest of is the **provider router** (`apps/api/providers/router.py`). Agents never call a model directly. They ask for a task, like "score these headlines", and the router:
+
+1. picks providers in the order set in `config/providers.yaml`, skipping any with no key or a recently rejected key, and moving any with less than 20% of their free quota left to the back of the line;
+2. retries rate limits and server errors with exponential backoff (and honors `Retry-After`);
+3. falls back to the next provider when one keeps failing;
+4. validates every response against a Pydantic schema, gives the model one chance to repair invalid JSON, and treats a second failure like an outage;
+5. logs every call (tokens, latency, success) so the dashboard can show how much of each free tier I've used today.
+
+The reasons behind most design choices are in [`docs/decisions.md`](docs/decisions.md). [`SPEC.md`](SPEC.md) is the full spec I built against.
+
+## Running it
+
+You'll need macOS or Linux, [uv](https://docs.astral.sh/uv/), Node.js 20+ with [pnpm](https://pnpm.io/installation), and the [Claude Code](https://claude.com/claude-code) CLI logged in (`claude auth login`).
 
 ```bash
 git clone https://github.com/offquestxo/Wyrd-Engine.git
 cd Wyrd-Engine
-make setup          # installs Python + JS deps, creates .env, creates data/wyrd.db
+make setup     # installs dependencies, creates .env and the database
 ```
 
-Then open `.env` and add your keys (see below). `.env` and `data/` are git-ignored, so never commit them.
+Add your keys to `.env` (see below), then:
 
 ```bash
-make check-providers   # tests each API key (Groq, Gemini, NVIDIA, YouTube)
-make check-models      # checks configured model IDs against each provider's live list
-make dev               # API on http://127.0.0.1:8000, web on http://127.0.0.1:3000 (prints the URL)
-make dev WEB_PORT=3005 # require a specific web port (API_PORT works the same way)
-make test              # lint + type check + offline tests (Python and web)
-make test-live         # hits the real APIs with Circuit City as the test company
+make check-providers   # tests each API key
+make dev               # API on 127.0.0.1:8000, web app on 127.0.0.1:3000
+make test              # lint, type checks and the offline test suite
+make test-live         # tests against the real APIs, using Circuit City
 ```
 
-If another app already uses port 3000, `make dev` starts the web app on the next free port
-and prints the address. Set `WEB_PORT` to require a specific port.
+If port 3000 is taken, `make dev` picks the next free one and prints it. `make dev WEB_PORT=3005` forces a port. Everything binds to 127.0.0.1 only.
 
 ## API keys
 
-All are free. Only `SEC_USER_AGENT` is needed for the keyless sources. Everything else degrades gracefully when a key is missing.
+All of these have free tiers, and every one is optional. The app works around whichever keys are missing. `.env` is git-ignored.
 
-| `.env` variable | What it's for | Where to get it |
+| Variable | Used for | Get it at |
 |---|---|---|
-| `GROQ_API_KEY` | Fast scoring, @mention parsing | [console.groq.com/keys](https://console.groq.com/keys) → *Create API Key* |
-| `GEMINI_AUTH` / `GEMINI_API_KEY` | Long documents (10-Ks, court filings), outlier analysis, Gemma scoring | Use OAuth: set `GEMINI_AUTH=oauth` after the steps in [Gemini via OAuth](#gemini-via-oauth-recommended). New AI Studio API keys (`AQ.` format) are rejected by the Gemini API; a standard `AIza` key also works if you have one. Your free-tier limits are at [aistudio.google.com/rate-limit](https://aistudio.google.com/rate-limit) |
-| `MISTRAL_API_KEY` | Scoring, @mention parsing, long documents, outlier analysis (primary while Groq/Gemini are unavailable) | [console.mistral.ai/api-keys](https://console.mistral.ai/api-keys) → *Create new key* (free "Experiment" plan; see your limits at [admin.mistral.ai/plateforme/limits](https://admin.mistral.ai/plateforme/limits)) |
-| `OPENROUTER_API_KEY` | Last-resort free-model fallback for scoring and parsing | [openrouter.ai/settings/keys](https://openrouter.ai/settings/keys) → *Create key*. Free models allow 50 requests/day (1,000/day after buying $10 of credits) |
-| `NVIDIA_API_KEY` | Dossier second opinions, embeddings | [build.nvidia.com](https://build.nvidia.com) → sign in → profile menu → *API Keys* → *Generate* (starts with `nvapi-`) |
-| `YOUTUBE_API_KEY` | @outlier stats, gap-finder coverage checks | [Google Cloud Console](https://console.cloud.google.com/): create a project → enable [YouTube Data API v3](https://console.cloud.google.com/apis/library/youtube.googleapis.com) → *APIs & Services → Credentials → Create credentials → API key*. Restrict the key to the YouTube Data API |
-| `COURTLISTENER_TOKEN` | Higher limits for lawsuits/bankruptcy dockets (optional; anonymous search works) | Create an account at [courtlistener.com](https://www.courtlistener.com/), then copy your token from your profile's API page (see [API help](https://www.courtlistener.com/help/api/rest/)) |
-| `NOTION_TOKEN`, `NOTION_DATABASE_ID` | Optional Notion mirror (Phase 7) | [notion.so/profile/integrations](https://www.notion.so/profile/integrations) → *New integration* → copy the secret; share your stories database with the integration |
-| `SEC_USER_AGENT` | Required by SEC EDGAR (no key) | Set to your name or app plus a contact email, e.g. `"wyrd.exe research you@example.com"` |
+| `GROQ_API_KEY` | Fast scoring and parsing | [console.groq.com/keys](https://console.groq.com/keys) |
+| `GEMINI_AUTH` / `GEMINI_API_KEY` | Reading long documents, outlier analysis | See [Gemini](#gemini) below |
+| `NVIDIA_API_KEY` | Second-opinion checks, embeddings | [build.nvidia.com](https://build.nvidia.com) → API Keys |
+| `OPENROUTER_API_KEY` | Last-resort fallback | [openrouter.ai/settings/keys](https://openrouter.ai/settings/keys) |
+| `MISTRAL_API_KEY` | Wired in, switched off in config | [console.mistral.ai](https://console.mistral.ai/api-keys) |
+| `YOUTUBE_API_KEY` | Channel and video stats | Google Cloud Console → enable YouTube Data API v3 → create an API key |
+| `COURTLISTENER_TOKEN` | Higher limits on court records | [courtlistener.com](https://www.courtlistener.com/help/api/rest/) |
+| `NOTION_TOKEN`, `NOTION_DATABASE_ID` | Mirror stories to Notion | [notion.so/profile/integrations](https://www.notion.so/profile/integrations) |
+| `SEC_USER_AGENT` | Required by SEC EDGAR | Your name or app plus an email, e.g. `"wyrd.exe research you@example.com"` |
 
-Model IDs and free-tier limits live in `config/providers.yaml`. Free tiers change often, so edit that file (or Settings, from Phase 1) when they do.
+Model IDs and free-tier limits live in `config/providers.yaml`, because they change often. You can edit them from the Settings page too.
+
+### Gemini
+
+When I set this up (October 2026), new AI Studio keys in the `AQ.` format were rejected by the Gemini API, so the engine can sign in with your Google account instead. The short version:
+
+1. In your Google Cloud project, enable the Generative Language API.
+2. Set up the OAuth consent screen (External, add yourself as a test user) and create a **Desktop** OAuth client. Save its JSON as `~/.config/wyrd/client_secret.json`, outside the repo.
+3. Give your account the **Service Usage Consumer** role on the project.
+4. Log in:
+
+   ```bash
+   gcloud auth application-default login \
+     --client-id-file="$HOME/.config/wyrd/client_secret.json" \
+     --scopes="https://www.googleapis.com/auth/cloud-platform,https://www.googleapis.com/auth/generative-language.retriever"
+   gcloud auth application-default set-quota-project YOUR_PROJECT_ID
+   ```
+
+5. Put `GEMINI_AUTH=oauth` in `.env` and click **Reload .env** in Settings.
+
+While the OAuth app is in Testing mode, Google expires the login about once a week. Settings will tell you when to run step 4 again. A standard `AIza…` key also works if you have one.
 
 ## Using the app
 
-Open http://127.0.0.1:3000 after `make dev`. In Chrome or Edge, use the install icon in the address bar to install it as a desktop app.
+Open the address `make dev` prints.
 
-| Shortcut | Action |
-|---|---|
-| `⌘K` / `Ctrl+K` | Command palette: jump to a page, start an agent, find a story |
-| `g` then `h` `c` `s` `r` `o` `,` | Go to Home, Chat, Stories, Research, Outliers, Settings |
-| `⌘.` / `Ctrl+.` | Toggle the live panel (active runs + event stream) |
-| `⌘S` in a config editor | Save (validated before writing) |
+- **Home** shows running agents, pending plans, and today's usage for each provider.
+- **Chat** is where you talk to the orchestrator. Start a message with `@scout` or `@outlier` to skip Claude: a fast model turns it straight into a plan card.
+- **Stories** is a table or board of every story idea, with scores and sources.
+- **Research** shows the dossiers. Any claim whose quote can't be found in its cited source is moved to "Open Questions" instead of being kept.
+- **Outliers** lists competitor videos that beat their channel's median by 3× or more.
+- **Settings** has key status, provider routing, per-agent auto-approve (off by default) and the Notion sync.
 
-**Settings** uses real data: key status and "Test connection", provider routes and limits, per-agent auto-approve (off by default), and editors for every file in `config/`. After editing `.env`, click **Reload .env** instead of restarting.
+`⌘K` / `Ctrl+K` opens the command palette. `g` followed by `h`, `c`, `s`, `r`, `o` or `,` jumps between pages.
 
-**Chat** talks to the orchestrator: Claude Code in headless mode, using your logged-in `claude` CLI (check with `claude auth status`). It answers questions from the story database and memory, and proposes a **plan card** for any work; nothing runs until you click **Approve** (or turn on auto-approve for that agent). When the runs finish, a result card appears and the orchestrator summarizes. Start a message with `@scout` or `@outlier` to skip Claude entirely: a fast model parses it straight into a plan card. Claude calls per day are counted against a soft cap (Settings → Agents) and shown in the chat header and on Home.
+## Data sources
 
-The orchestrator runs with only the engine's own tools (no shell, no file access). Its sessions are stored under `~/.local/share/wyrd/orchestrator` (`config/engine.yaml` → `orchestrator`). The browser reaches the API through the web app's own `/api` path, which Next.js forwards to `127.0.0.1:8000`.
-
-**Notion (optional)** mirrors the Stories table to a Notion database: stories push to Notion, and only Status and Notes come back (the newest change wins), so you can move cards from your phone. Setup:
-1. Create an internal integration at [notion.so/profile/integrations](https://www.notion.so/profile/integrations) and put its secret in `NOTION_TOKEN`.
-2. Use a database with these exact properties: Title (title), Status/Series/Format (select), Hook/Scores/Sources/Notes (text), Gap Score/Engine ID (number), Updated (date). The "wyrd.exe Stories" database was created this way.
-3. In the database's ••• menu → **Connections**, add your integration, and put the database ID in `NOTION_DATABASE_ID`.
-4. Settings → System → **Reload .env**, then Settings → Notion → **Sync now**. Turn on auto-sync to push changes a few seconds after they happen and pull every 10 minutes.
-
-Without the token, sync is off and nothing else changes.
-
-**Research** shows @researcher dossiers. Start one with **Research this** in a story's drawer or `@researcher <story>` in Chat; the plan card shows the depth, the sources it will use and its Claude turn budget (quick 20, standard 40, deep 70; `config/scoring.yaml` → `research`). Every Timeline item, Key Number and the Twist is checked on save: its excerpt must appear in the cited source, or it moves to "Open Questions / Unverified". Dossiers export to `research/<story>/dossier.md` and `sources.json`. **Copy for Script Room** copies the markdown; **Open exported file** shows it in Finder.
-
-## Gemini via OAuth (recommended)
-
-New Gemini API keys (`AQ.` format) are rejected by the Gemini API, so this engine signs in to Gemini with your Google account instead, using gcloud *Application Default Credentials* (ADC). These are the steps that worked (2026-10-05), adapted from [Google's OAuth quickstart](https://ai.google.dev/gemini-api/docs/oauth). Do them in the Google Cloud project behind your AI Studio account (often named `gen-lang-client-…`).
-
-1. **Enable the API:** [Generative Language API](https://console.cloud.google.com/apis/library/generativelanguage.googleapis.com) → *Enable*.
-2. **Consent screen:** *Google Auth platform → Branding*: fill in the app name and your email. *Audience*: user type **External**, then under **Test users** add your own Google account. Without this, the browser login fails with `access_denied`.
-3. **Desktop OAuth client:** *Google Auth platform → Clients → Create client → Desktop app*. Download the JSON and save it as `~/.config/wyrd/client_secret.json` (outside the repo; never commit it).
-4. **Let your account use the project's quota:** *IAM & Admin → IAM → Grant access* → your account → role **Service Usage Consumer** (`roles/serviceusage.serviceUsageConsumer`). This provides the `serviceusage.services.use` permission.
-5. **Install gcloud and log in** (a browser opens; the "Google hasn't verified this app" warning is expected for your own test app → *Continue*):
-
-```bash
-brew install --cask gcloud-cli
-```
-
-```bash
-gcloud auth application-default login --client-id-file="$HOME/.config/wyrd/client_secret.json" --scopes="https://www.googleapis.com/auth/cloud-platform,https://www.googleapis.com/auth/generative-language.retriever"
-```
-
-6. **Set the quota project.** If gcloud asks to enable the **Cloud Resource Manager API**, say yes, or enable it in the console:
-
-```bash
-gcloud auth application-default set-quota-project YOUR_PROJECT_ID
-```
-
-7. **Point the engine at OAuth:** in `.env`, add `GEMINI_AUTH=oauth` and comment out `GEMINI_API_KEY` (`# GEMINI_API_KEY=...`). Then click **Reload .env** in Settings (or restart `make dev`).
-8. **Check it:** `make check-providers` should show Gemini as `connected via OAuth` with auth `oauth (ADC)`, and `make check-models` should list every configured Gemini model.
-
-The engine reads `~/.config/gcloud/application_default_credentials.json` directly with Google's `google-auth` library, so gcloud doesn't need to be on the app's PATH. Access tokens refresh automatically, and the quota project from that file is sent as the `x-goog-user-project` header. While your OAuth app is in **Testing** mode, Google expires the login about once a week. When that happens, Settings and the affected run logs tell you to rerun the step 5 login command; then click **Reload .env**.
-
-### Troubleshooting
-
-| Symptom | Cause | Fix |
-|---|---|---|
-| Browser login ends with `Error 403: access_denied` | Your account isn't a test user of the Testing-mode app | Step 2: *Audience → Test users → Add users* with the account you log in with |
-| `PERMISSION_DENIED … serviceusage.services.use` (from `set-quota-project` or Gemini calls) | Your account can't bill usage to the quota project | Step 4: grant **Service Usage Consumer** on that project, wait a minute, retry |
-| `set-quota-project` says the Cloud Resource Manager API is disabled | It's needed to look up the project | Enable [Cloud Resource Manager API](https://console.cloud.google.com/apis/library/cloudresourcemanager.googleapis.com), rerun step 6 |
-| `default credentials were not found` / Settings says "no Application Default Credentials" | The step 5 login never completed (or ran under another user or `CLOUDSDK_CONFIG`) | Rerun step 5; check that `gcloud auth application-default print-access-token` prints a token |
-| `make check-providers` shows Gemini with `auth: api_key` and an `AQ.` key error | `.env` has no `GEMINI_AUTH=oauth` line, so the engine used the API key | Add `GEMINI_AUTH=oauth` to `.env`, then **Reload .env** |
-| "Google OAuth credentials expired or were revoked" | Testing-mode logins expire about weekly | Rerun step 5, then **Reload .env** |
-
-## Source CLIs
-
-Every source prints JSON: `{"source", "command", "ok", "data" | "error"}`.
+Each source has a small CLI that prints JSON, which made them easy to test on their own:
 
 ```bash
 uv run python -m apps.api.sources.edgar search "Circuit City"
-uv run python -m apps.api.sources.edgar filings 104599 --forms 10-K
-uv run python -m apps.api.sources.edgar fulltext '"Circuit City" liquidation' --forms 8-K
-uv run python -m apps.api.sources.edgar facts 764478          # XBRL (2009+ filers only)
 uv run python -m apps.api.sources.wikipedia article "Circuit City"
-uv run python -m apps.api.sources.wikipedia pageviews "Circuit City" --days 60
 uv run python -m apps.api.sources.wayback snapshots circuitcity.com --from 2007 --to 2009
 uv run python -m apps.api.sources.courtlistener search "Circuit City Stores"
-uv run python -m apps.api.sources.loc_newspapers search "Circuit City"
-uv run python -m apps.api.sources.internet_archive search '"Circuit City"' --mediatype texts
-uv run python -m apps.api.sources.news_rss search "Circuit City"
-uv run python -m apps.api.sources.hackernews search "Circuit City"
-uv run python -m apps.api.sources.reddit_rss search "Circuit City" --subreddit business
-uv run python -m apps.api.sources.gdelt search "Circuit City"
-uv run python -m apps.api.sources.yahoo history BBY --period 5y
-uv run python -m apps.api.sources.youtube channel @companyman
+uv run python -m apps.api.sources.youtube channel @companyman114
 ```
 
-Run `--help` on any module for all commands.
+There are also modules for Library of Congress newspapers, the Internet Archive, Google News RSS, Hacker News, Reddit RSS, GDELT and Yahoo Finance. Run any of them with `--help`.
 
 ## Layout
 
 ```
-config/        providers, sources, channels, scoring (YAML)
-prompts/       every LLM prompt (.md)
-apps/api/      FastAPI backend: db/, providers/ (router), sources/, agents/
+apps/api/      FastAPI backend: agents, provider router, sources, database
 apps/web/      Next.js frontend
-research/      exported dossiers (git-tracked)
-data/          SQLite database (git-ignored)
-docs/          decisions log
+config/        providers, sources, channels and scoring (YAML)
+prompts/       every LLM prompt, as markdown
+research/      exported dossiers (Circuit City and Bre-X are included)
+tests/         pytest suite
+docs/          decision log and demo notes
 ```
